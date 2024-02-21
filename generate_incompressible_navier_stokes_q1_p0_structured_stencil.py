@@ -32,7 +32,7 @@ def CalculateJacobian(gauss_coordinates, nodal_coordinates):
     for i in range(4):
         for d1 in range(2):
             for d2 in range(2):
-                jacobian[d1,d2] += DN_mat[i,d1] * nodal_coordinates[i,d2]
+                jacobian[d1,d2] += DN_mat[i,d2] * nodal_coordinates[i,d1]
     return jacobian
 
 def CalculateHessian(gauss_coordinates, nodal_coordinates):
@@ -42,7 +42,7 @@ def CalculateHessian(gauss_coordinates, nodal_coordinates):
         for d1 in range(2):
             for d2 in range(2):
                 for d3 in range(2):
-                    hessian[d1,d2,d3] += DDN_tensor[i,d1,d2] * nodal_coordinates[i,d3]
+                    hessian[d1,d2,d3] += DDN_tensor[i,d2,d3] * nodal_coordinates[i,d1]
     return hessian
 
 def ShapeFunctionsLocalValues(gauss_coordinates):
@@ -125,22 +125,22 @@ def ShapeFunctionsSecondGradients(gauss_coordinates, jacobian):
 
     LHS = sympy.Matrix(3, 3, lambda i, j: 0.0)
     LHS[0,0] = jacobian[0,0]**2
-    LHS[0,1] = jacobian[0,1]**2
-    LHS[0,2] = 2.0*jacobian[0,0]*jacobian[0,1]
-    LHS[1,0] = jacobian[1,0]**2
+    LHS[0,1] = jacobian[1,0]**2
+    LHS[0,2] = 2.0*jacobian[0,0]*jacobian[1,0]
+    LHS[1,0] = jacobian[0,1]**2
     LHS[1,1] = jacobian[1,1]**2
-    LHS[1,2] = 2.0*jacobian[1,0]*jacobian[1,1]
-    LHS[2,0] = jacobian[0,0]*jacobian[1,0]
-    LHS[2,1] = jacobian[0,1]*jacobian[1,1]
+    LHS[1,2] = 2.0*jacobian[0,1]*jacobian[1,1]
+    LHS[2,0] = jacobian[0,0]*jacobian[0,1]
+    LHS[2,1] = jacobian[1,0]*jacobian[1,1]
     LHS[2,2] = jacobian[0,1]*jacobian[1,0] + jacobian[0,0]*jacobian[1,1]
     inv_LHS = LHS.inv()
 
     DDN_DDX = sympy.MutableDenseNDimArray(sympy.zeros(4*2*2),shape=(4,2,2))
     for i in range(4):
         RHS = sympy.Matrix(3, 1, lambda i, j: 0.0)
-        RHS[0] = DDN_DDE[i,0,0] - DN_DX[i,0]*hessian[0,0,0] - DN_DX[i,0]*hessian[1,0,0]
-        RHS[1] = DDN_DDE[i,1,1] - DN_DX[i,0]*hessian[0,1,1] - DN_DX[i,0]*hessian[1,1,1]
-        RHS[2] = DDN_DDE[i,0,1] - DN_DX[i,0]*hessian[0,0,1] - DN_DX[i,0]*hessian[1,0,1]
+        RHS[0] = DDN_DDE[i,0,0] - DN_DX[i,0]*hessian[0,0,0] - DN_DX[i,1]*hessian[1,0,0]
+        RHS[1] = DDN_DDE[i,1,1] - DN_DX[i,0]*hessian[0,1,1] - DN_DX[i,1]*hessian[1,1,1]
+        RHS[2] = DDN_DDE[i,0,1] - DN_DX[i,0]*hessian[0,0,1] - DN_DX[i,1]*hessian[1,0,1]
         DDN_DDX_i = inv_LHS*RHS
         DDN_DDX[i,0,0] = DDN_DDX_i[0]
         DDN_DDX[i,0,1] = DDN_DDX_i[2]
