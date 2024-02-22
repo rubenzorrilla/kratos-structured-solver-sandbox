@@ -5,6 +5,28 @@ import importlib
 import KratosMultiphysics
 import KratosMultiphysics.sympy_fe_utilities as KratosSympy
 
+def GetOutstring(dim):
+    if dim == 2:
+        outstring = "import math\n"
+        outstring += "import numpy\n"
+        outstring += "\n"
+        outstring += "def CalculateRightHandSide(a, b, c, x0, y0, z0, mu, rho, v, p, f, acc, v_conv, stab_c1 = 4.0, stab_c2 = 2.0):\n"
+        outstring += f"    RHS = numpy.empty(8)\n"
+        outstring += "#substitute_rhs_2d"
+        outstring += "\n    return RHS"
+    elif dim == 3:
+        outstring = "import math\n"
+        outstring += "import numpy\n"
+        outstring += "\n"
+        outstring += "def CalculateRightHandSide(a, b, c, x0, y0, z0, mu, rho, v, p, f, acc, v_conv, stab_c1 = 4.0, stab_c2 = 2.0):\n"
+        outstring += f"    RHS = numpy.empty(16)\n"
+        outstring += "#substitute_rhs_3d"
+        outstring += "\n    return RHS"
+    else:
+        raise NotImplementedError
+
+    return outstring
+
 def ImportKinematicsModule(dim):
     if dim == 2:
         return importlib.import_module("quadrilateral_2d_4n_kinematics")
@@ -30,7 +52,6 @@ mu = sympy.Symbol('mu', positive=True)
 rho = sympy.Symbol('rho', positive=True)
 
 # Stabilization parameters
-h = sympy.Symbol('h', positive=True)
 stab_c1 = sympy.Symbol('stab_c1', positive=True)
 stab_c2 = sympy.Symbol('stab_c2', positive=True)
 
@@ -39,7 +60,6 @@ num_nodes = 4 if dim == 2 else 8
 p = sympy.Symbol('p') # Pressure value
 f = KratosSympy.DefineMatrix('f', num_nodes, dim) # Body force
 v = KratosSympy.DefineMatrix('v', num_nodes, dim) # Nodal velocities
-v_n = KratosSympy.DefineMatrix('v_n', num_nodes, dim) # Nodal velocities (previous step)
 acc = KratosSympy.DefineMatrix('acc', num_nodes, dim) # Nodal acceleration (previous step)
 v_conv = KratosSympy.DefineMatrix('v_conv', num_nodes, dim) # Linearised convective velocity
 
@@ -79,6 +99,8 @@ for g in range(len(quadrature)):
     div_v_conv_g = sum([grad_v_conv_g[d,d] for d in range(dim)])
 
     # Calculate current Gauss point stabilization constant
+    # Note that the element size (h) is computed at each Gauss point
+    h = sympy.sqrt(weight) if dim == 2 else sympy.cbrt(weight)
     v_conv_g_norm = sympy.sqrt(sum(v**2 for v in v_conv_g))
     tau = 1.0/(stab_c1*mu/h**2 + stab_c2*rho*v_conv_g_norm/h)
 
@@ -111,6 +133,13 @@ for g in range(len(quadrature)):
             rhs_i_d = sympy.diff(phi, w[i,d])
             if do_simplify:
                 rhs_i_d = sympy.simplify(rhs_i_d)
-            RHS[i] += gauss_weight * rhs_i_d
+            RHS[i*dim + d] += gauss_weight * rhs_i_d
 
-sympy.pprint(RHS)
+RHS_output = KratosSympy.OutputVector_CollectingFactors(RHS, "RHS", "python", indentation_level=1, replace_indices=True, assignment_op=" = ")
+outstring = GetOutstring(dim)
+outstring = outstring.replace(f"#substitute_rhs_{dim}d", RHS_output)
+
+out = open(f"incompressible_navier_stokes_q1_p0_structured_element_{dim}d.py",'w')
+out.write(outstring)
+out.close()
+
