@@ -30,6 +30,8 @@ print(f"num_nodes: {num_nodes}")
 print(f"num_cells: {num_cells}")
 print(f"cell_size: {cell_size}\n")
 
+# TODO: Create auxiliary Kratos output mesh
+
 # Create mesh dataset
 p = np.zeros((num_cells, 1))
 f = np.zeros((num_nodes, 3))
@@ -37,12 +39,29 @@ v = np.zeros((num_nodes, 3))
 v_n = np.zeros((num_nodes, 3))
 acc = np.zeros((num_nodes, 3))
 
+cell_domain_size = np.prod(cell_size[:dim])
+mass_factor = (rho*cell_domain_size) / (4.0 if dim == 2 else 8.0)
+lumped_mass_vector = np.zeros((num_nodes * dim, 1))
+for cell in cells:
+    for node in cell:
+        for d in range(dim):
+            lumped_mass_vector[node*dim + d] += mass_factor
+
 # Time loop
 current_step = 1
 current_time = init_time + dt
 while current_time < end_time:
     print(f"### Step {current_step} - time {current_time} ###\n")
 
+    # Solve intermediate velocity with RK scheme
+
+    # Solve pressure update
+
+    # Correct velocity
+
+    # Output results
+
+    # Update variables for next time step
     current_step += 1
     current_time += dt
 
