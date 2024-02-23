@@ -1,7 +1,7 @@
 import math
 import numpy
 
-def CalculateRightHandSide(a, b, c, x0, y0, z0, mu, rho, v, p, f, acc, v_conv, stab_c1 = 4.0, stab_c2 = 2.0):
+def CalculateRightHandSide(a, b, c, mu, rho, v, p, f, acc, v_conv, stab_c1 = 4.0, stab_c2 = 2.0):
     RHS = numpy.empty(8)
     cRHS0 = 0.211324865405187*v[3,0]
     cRHS1 = 0.788675134594813*v[1,0]
