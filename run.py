@@ -75,6 +75,18 @@ for cell in cells:
         for d in range(dim):
             lumped_mass_vector[node*dim + d] += mass_factor
 
+cell_gradient_operator = element.GetCellGradientOperator(cell_size[0], cell_size[1], cell_size[2])
+gradient_operator = np.zeros((num_nodes * dim, num_cells))
+divergence_operator = np.zeros((num_cells, num_nodes * dim))
+for i_cell in range(cells.shape[0]):
+    cell = cells[i_cell]
+    i_node = 0
+    for node in cell:
+        for d in range(dim):
+            gradient_operator[node*dim + d, i_cell] = cell_gradient_operator[i_node*dim + d]
+            divergence_operator[i_cell, node*dim + d] = cell_gradient_operator[i_node*dim + d]
+        i_node += 1
+
 # Set velocity fixity vector (0: free ; 1: fixed)
 fixity = np.zeros((num_nodes*dim, 1), dtype=int)
 
@@ -95,10 +107,21 @@ for i_node in range(num_nodes):
 
 # Set forcing term
 for i_node in range(num_nodes):
-    f[i_node, :] = [1.0e1,0.0,0.0]
+    f[i_node, :] = [0.0e1,0.0,0.0]
 
 print("Init v: ", v)
 print("Init v_n: ", v_n)
+
+# Set the matrix for the pressure problem
+# Note that the velocity fixity needs to be considered in the lumped mass operator in here
+#TODO: To be removed as soon as we have the CG with linear operator
+pressure_matrix = np.zeros((num_cells, num_cells))
+for i in range(num_cells):
+    for j in range(num_cells):
+        for m in range(num_nodes*dim):
+            if fixity[m] == 0:
+                pressure_matrix[i,j] += divergence_operator[i,m] * gradient_operator[m,j] / lumped_mass_vector[m,0]
+pressure_matrix_inv = np.linalg.inv(pressure_matrix)
 
 # Time loop
 current_step = 1
@@ -168,8 +191,24 @@ while current_time < end_time:
                 v[i, d] = v_n[i, d]
 
     # Solve pressure update
+    delta_p_rhs = np.zeros((num_cells, 1))
+    for i in range(num_cells):
+        for j in range(num_nodes):
+            for d in range(dim):
+                delta_p_rhs[i,0] -= divergence_operator[i, j*dim + d] * v[j, d]
+    delta_p_rhs *= dt
+    delta_p = pressure_matrix_inv @ delta_p_rhs
+    p += delta_p
 
     # Correct velocity
+    for i in range(num_nodes):
+        for d in range(dim):
+            aux_i = i * dim + d
+            if fixity[aux_i] == 0:
+                for j in range(num_cells):
+                    v[i, d] += dt * gradient_operator[aux_i,j] * delta_p[j,0] / lumped_mass_vector[aux_i,0]
+            else:
+                v[i, d] = v_n[i, d]
 
     # Output results
     print("v: ", v)

@@ -282,3 +282,20 @@ def CalculateRightHandSide(a, b, c, mu, rho, v, p, f, acc, v_conv):
     RHS[7] = cRHS155 + 0.0446581987385205*cRHS161 + 0.0446581987385205*cRHS163 + 0.622008467928146*cRHS170 + 0.622008467928146*cRHS171 + cRHS203*cRHS266 + cRHS204*cRHS254 - cRHS217*cRHS49 - cRHS218*cRHS46 + cRHS222 - cRHS253*cRHS263 + cRHS259*cRHS267 + cRHS261*cRHS268 - cRHS262*cRHS266 - cRHS264*cRHS268 - cRHS265*cRHS267 - cRHS36*(-cRHS150 + cRHS23*cRHS244) - cRHS36*(-cRHS154 + cRHS23*cRHS245)
 
     return RHS
+
+def GetCellGradientOperator(a, b, c):
+    G = numpy.empty(8)
+    cG0 = 2.0/a
+    cG1 = -cG0
+    cG2 = 2.0/b
+    cG3 = -cG2
+    G[0] = cG1
+    G[1] = cG3
+    G[2] = cG0
+    G[3] = cG3
+    G[4] = cG0
+    G[5] = cG2
+    G[6] = cG1
+    G[7] = cG2
+
+    return G

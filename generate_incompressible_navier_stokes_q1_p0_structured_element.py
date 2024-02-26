@@ -14,14 +14,24 @@ def GetOutstring(dim):
         outstring += f"    RHS = numpy.empty(8)\n"
         outstring += "#substitute_rhs_2d"
         outstring += "\n    return RHS"
+        outstring += "\n\n"
+        outstring += "def GetCellGradientOperator(a, b, c):\n"
+        outstring += f"    G = numpy.empty(8)\n"
+        outstring += "#substitute_G_2d"
+        outstring += "\n    return G"
     elif dim == 3:
         outstring = "import math\n"
         outstring += "import numpy\n"
         outstring += "\n"
         outstring += "def CalculateRightHandSide(a, b, c, mu, rho, v, p, f, acc, v_conv):\n"
-        outstring += f"    RHS = numpy.empty(16)\n"
+        outstring += f"    RHS = numpy.empty(24)\n"
         outstring += "#substitute_rhs_3d"
         outstring += "\n    return RHS"
+        outstring += "\n\n"
+        outstring += "def GetCellGradientOperator(a, b, c):\n"
+        outstring += f"    G = numpy.empty(24)\n"
+        outstring += "#substitute_G_3d"
+        outstring += "\n    return G"
     else:
         raise NotImplementedError
 
@@ -72,6 +82,7 @@ quadrature = kinematics_module.GetGaussQuadrature(integration_order)
 nodal_coords = kinematics_module.SetNodalCoordinates(x0, y0, z0, a, b, c)
 
 # Loop the Gauss points (note that this results in the complete elemental RHS contribution)
+G = sympy.Matrix(num_nodes*dim, 1, lambda i, j : 0.0)
 RHS = sympy.Matrix(num_nodes*dim, 1, lambda i, j : 0.0)
 for g in range(len(quadrature)):
     # Get current Gauss point data
@@ -135,9 +146,16 @@ for g in range(len(quadrature)):
                 rhs_i_d = sympy.simplify(rhs_i_d)
             RHS[i*dim + d] += gauss_weight * rhs_i_d
 
+    # Add gradient (and divergence) operator contribution
+    for i in range(num_nodes):
+        for d in range(dim):
+            G[i*dim + d, 0] += gauss_weight * DN_DX[i,d]
+
 RHS_output = KratosSympy.OutputVector_CollectingFactors(RHS, "RHS", "python", indentation_level=1, replace_indices=True, assignment_op=" = ")
+G_output = KratosSympy.OutputVector_CollectingFactors(G, "G", "python", indentation_level=1, replace_indices=True, assignment_op=" = ")
 outstring = GetOutstring(dim)
 outstring = outstring.replace(f"#substitute_rhs_{dim}d", RHS_output)
+outstring = outstring.replace(f"#substitute_G_{dim}d", G_output)
 
 out = open(f"incompressible_navier_stokes_q1_p0_structured_element_{dim}d.py",'w')
 out.write(outstring)
