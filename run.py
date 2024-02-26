@@ -2,18 +2,24 @@ import mesher
 import numpy as np
 import incompressible_navier_stokes_q1_p0_structured_element_2d as element
 
-def CalculateDeltaTime(cell_size, velocities, target_cfl):
+def CalculateDeltaTime(rho, mu, cell_size, velocities, target_cfl, target_fourier):
     max_v = 0.0
     for v in velocities:
         norm_v = np.linalg.norm(v)
         if norm_v > max_v:
             max_v = norm_v
 
-    dt_x = cell_size[0] * target_cfl / max_v
-    dt_y = cell_size[1] * target_cfl / max_v
-    dt_z = cell_size[2] * target_cfl / max_v if cell_size[2] > 1.0e-12 else 1.0e8
+    cfl_dt_x = cell_size[0] * target_cfl / max_v
+    cfl_dt_y = cell_size[1] * target_cfl / max_v
+    cfl_dt_z = cell_size[2] * target_cfl / max_v if cell_size[2] > 1.0e-12 else 1.0e8
+    cfl_dt = min(cfl_dt_x, cfl_dt_y, cfl_dt_z)
 
-    return min(dt_x, dt_y, dt_z)
+    fourier_dt_x = rho * cell_size[0]**2 * target_fourier / mu
+    fourier_dt_y = rho * cell_size[1]**2 * target_fourier / mu
+    fourier_dt_z = rho * cell_size[2]**2 * target_fourier / mu if cell_size[2] > 1.0e-12 else 1.0e8
+    fourier_dt = min(fourier_dt_x, fourier_dt_y, fourier_dt_z)
+
+    return min(cfl_dt, fourier_dt)
 
 def GetButcherTableau():
     A = np.zeros((4,4))
@@ -25,8 +31,7 @@ def GetButcherTableau():
     return A, B, C
 
 # Problem data
-dt = 0.1
-end_time = 0.05
+end_time = 1.0e-1
 init_time = 0.0
 
 # Material data
@@ -88,18 +93,17 @@ for i_node in range(num_nodes):
         v[i_node, :] = [1.0,0.0,0.0]
         v_n[i_node, :] = [1.0,0.0,0.0]
 
-print(v)
-print(v_n)
+print("Init v: ", v)
+print("Init v_n: ", v_n)
 
 # Time loop
 current_step = 1
 current_time = init_time
 rk_A, rk_B, rk_C = GetButcherTableau()
 while current_time < end_time:
-    dt = CalculateDeltaTime(cell_size, v_n, 0.5)
+    dt = CalculateDeltaTime(rho, mu, cell_size, v_n, 0.5, 0.5)
     print(f"### Step {current_step} - time {current_time} - dt {dt} ###\n")
 
-    #TODO: IMPLEMENT FIXITY!!!
     # Solve intermediate velocity with RK scheme
     rk_step_time = current_time
     rk_num_steps = rk_C.shape[0]
@@ -108,16 +112,20 @@ while current_time < end_time:
         # Calculate input values for current step residual calculation
         rk_step_time += rk_C[rk_step]*dt
 
-        rk_v = np.empty((num_nodes*dim, 1))
+        rk_v = np.zeros((num_nodes*dim, 1))
         for a_ij in rk_A[rk_step, :rk_step]:
             for i in range(num_nodes):
                 for d in range(dim):
                     rk_v[i*dim + d] = a_ij * rk_res[i * dim + d, rk_step]
+
         for i in range(num_nodes):
             for d in range(dim):
                 aux_i = i * dim + d
-                rk_v[aux_i] *= dt / lumped_mass_vector[aux_i, 0]
-                rk_v[aux_i] += v_n[i,d]
+                if fixity[aux_i] == 0:
+                    rk_v[aux_i] *= dt / lumped_mass_vector[aux_i, 0]
+                    rk_v[aux_i] += v_n[i,d]
+                else:
+                    rk_v[aux_i] = v_n[i,d]
 
         # Calculate current step residual
         for i_cell in range(num_cells):
@@ -147,18 +155,21 @@ while current_time < end_time:
     for i in range(num_nodes):
         for d in range(dim):
             aux_i = i * dim + d
-            for rk_step in range(rk_num_steps):
-                v[i, d] += rk_B[rk_step] * rk_res[aux_i, rk_step]
-            v[i, d] *= dt * lumped_mass_vector[aux_i, 0]
-            v[i, d] += v_n[i, d]
+            if fixity[aux_i] == 0:
+                for rk_step in range(rk_num_steps):
+                    v[i, d] += rk_B[rk_step] * rk_res[aux_i, rk_step]
+                v[i, d] *= dt * lumped_mass_vector[aux_i, 0]
+                v[i, d] += v_n[i, d]
+            else:
+                v[i, d] = v_n[i, d]
 
     # Solve pressure update
 
     # Correct velocity
 
     # Output results
-    print(v)
-    print(v_n)
+    print("v: ", v)
+    print("v_n: ", v_n)
 
     # Update variables for next time step
     v_n = v

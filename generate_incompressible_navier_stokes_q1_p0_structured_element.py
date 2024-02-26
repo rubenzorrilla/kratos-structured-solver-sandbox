@@ -125,8 +125,9 @@ for g in range(len(quadrature)):
     stab_conv_term_2 = (rho * v_conv_g @ grad_w_g * v_subs)[0,0]
 
     # Add and differentiate the functional
-    phi = forcing_term - conv_term - visc_term + pres_term
-    phi += stab_conv_term_1 + stab_conv_term_2
+    # phi = forcing_term - conv_term - visc_term + pres_term
+    # phi += stab_conv_term_1 + stab_conv_term_2
+    phi = - visc_term
 
     for i in range(num_nodes):
         for d in range(dim):
