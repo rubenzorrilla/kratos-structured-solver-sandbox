@@ -2,6 +2,9 @@ import mesher
 import numpy as np
 import incompressible_navier_stokes_q1_p0_structured_element_2d as element
 
+import KratosMultiphysics
+from KratosMultiphysics.gid_output_process import GiDOutputProcess
+
 def CalculateDeltaTime(rho, mu, cell_size, velocities, target_cfl, target_fourier):
     max_v = 0.0
     for v in velocities:
@@ -31,7 +34,7 @@ def GetButcherTableau():
     return A, B, C
 
 # Problem data
-end_time = 1.0e-1
+end_time = 1.0e0
 init_time = 0.0
 
 # Material data
@@ -58,7 +61,50 @@ print(f"num_nodes: {num_nodes}")
 print(f"num_cells: {num_cells}")
 print(f"cell_size: {cell_size}\n")
 
-# TODO: Create auxiliary Kratos output mesh
+# Create auxiliary Kratos output mesh
+model = KratosMultiphysics.Model()
+output_model_part = model.CreateModelPart("OutputModelPart")
+fake_properties = output_model_part.CreateNewProperties(0)
+aux_id = 0
+for node in nodes:
+    print(node)
+    aux_id += 1
+    output_model_part.CreateNewNode(aux_id, node[0], node[1], 0.0)
+aux_id = 0
+for cell in cells:
+    aux_id += 1
+    output_model_part.CreateNewElement("Element2D4N", aux_id, [cell[0]+1, cell[1]+1, cell[2]+1, cell[3]+1], fake_properties)
+
+output_file = "output_model_part"
+gid_output =  GiDOutputProcess(
+    output_model_part,
+    output_file,
+    KratosMultiphysics.Parameters("""
+        {
+            "result_file_configuration": {
+                "gidpost_flags": {
+                    "GiDPostMode": "GiD_PostAscii",
+                    "WriteDeformedMeshFlag": "WriteUndeformed",
+                    "WriteConditionsFlag": "WriteConditions",
+                    "MultiFileFlag": "SingleFile"
+                },
+                "file_label": "time",
+                "output_control_type": "step",
+                "output_frequency": 1.0,
+                "body_output": true,
+                "node_output": false,
+                "skin_output": false,
+                "plane_output": [],
+                "nodal_results": [],
+                "nodal_nonhistorical_results": ["VELOCITY","ACCELERATION","VOLUME_ACCELERATION"],
+                "nodal_flags_results": [],
+                "gauss_point_results": [],
+                "additional_list_files": []
+            }
+        }
+    """))
+gid_output.ExecuteInitialize()
+gid_output.ExecuteBeforeSolutionLoop()
 
 # Create mesh dataset
 p = np.zeros((num_cells, 1))
@@ -128,7 +174,7 @@ current_step = 1
 current_time = init_time
 rk_A, rk_B, rk_C = GetButcherTableau()
 while current_time < end_time:
-    dt = CalculateDeltaTime(rho, mu, cell_size, v_n, 0.5, 0.5)
+    dt = CalculateDeltaTime(rho, mu, cell_size, v_n, 0.1, 0.1)
     print(f"### Step {current_step} - time {current_time} - dt {dt} ###\n")
 
     # Solve intermediate velocity with RK scheme
@@ -183,9 +229,10 @@ while current_time < end_time:
         for d in range(dim):
             aux_i = i * dim + d
             if fixity[aux_i] == 0:
+                v[i, d] = 0.0
                 for rk_step in range(rk_num_steps):
                     v[i, d] += rk_B[rk_step] * rk_res[aux_i, rk_step]
-                v[i, d] *= dt * lumped_mass_vector[aux_i, 0]
+                v[i, d] *= dt / lumped_mass_vector[aux_i, 0]
                 v[i, d] += v_n[i, d]
             else:
                 v[i, d] = v_n[i, d]
@@ -214,11 +261,28 @@ while current_time < end_time:
     print("v: ", v)
     print("v_n: ", v_n)
 
+    # Output results
+    output_model_part.ProcessInfo[KratosMultiphysics.STEP] = current_step
+    output_model_part.ProcessInfo[KratosMultiphysics.TIME] = current_time
+    aux_id = 1
+    for i_node in range(num_nodes):
+        output_model_part.GetNode(aux_id).SetValue(KratosMultiphysics.VELOCITY, v[i_node, :])
+        output_model_part.GetNode(aux_id).SetValue(KratosMultiphysics.ACCELERATION, acc[i_node, :])
+        output_model_part.GetNode(aux_id).SetValue(KratosMultiphysics.VOLUME_ACCELERATION, f[i_node, :])
+        aux_id += 1
+
+    gid_output.ExecuteInitializeSolutionStep()
+    gid_output.PrintOutput()
+    gid_output.ExecuteFinalizeSolutionStep()
+
     # Update variables for next time step
+    acc = (v - v_n) / dt
     v_n = v
     current_step += 1
     current_time += dt
 
+# Finalize results
+gid_output.ExecuteFinalize()
 
 
 
