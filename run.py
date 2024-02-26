@@ -1,5 +1,15 @@
 import mesher
 import numpy as np
+import incompressible_navier_stokes_q1_p0_structured_element_2d as element
+
+def GetButcherTableau():
+    A = np.zeros((4,4))
+    A[1,0] = 0.5
+    A[2,1] = 0.5
+    A[3,2] = 1.0
+    B = np.array([0.0, 0.5, 0.5, 1.0])
+    C = np.array([1.0/6.0, 1.0/3.0, 1.0/3.0, 1.0/6.0])
+    return A, B, C
 
 # Problem data
 dt = 0.1
@@ -50,10 +60,62 @@ for cell in cells:
 # Time loop
 current_step = 1
 current_time = init_time + dt
+rk_A, rk_B, rk_C = GetButcherTableau()
 while current_time < end_time:
     print(f"### Step {current_step} - time {current_time} ###\n")
 
+    #TODO: IMPLEMENT FIXITY!!!
     # Solve intermediate velocity with RK scheme
+    rk_step_time = current_time
+    rk_num_steps = rk_C.shape[0]
+    rk_res = np.zeros((num_nodes*dim, rk_num_steps))
+    for rk_step in range(rk_num_steps):
+        # Calculate input values for current step residual calculation
+        rk_step_time += rk_C[rk_step]*dt
+
+        rk_v = np.empty((num_nodes*dim, 1))
+        for a_ij in rk_A[rk_step, :rk_step]:
+            for i in range(num_nodes):
+                for d in range(dim):
+                    rk_v[i*dim + d] = a_ij * rk_res[i * dim + d, rk_step]
+        for i in range(num_nodes):
+            for d in range(dim):
+                aux_i = i * dim + d
+                rk_v[aux_i] *= dt / lumped_mass_vector[aux_i, 0]
+                rk_v[aux_i] += v_n[i,d]
+
+        # Calculate current step residual
+        for i_cell in range(num_cells):
+            # Get current cell data
+            cell_p = p[i_cell]
+            cell_v = np.empty((4 if dim == 2 else 8, dim))
+            cell_f = np.empty((4 if dim == 2 else 8, dim))
+            cell_acc = np.empty((4 if dim == 2 else 8, dim))
+            aux_i = 0
+            for i_node in cells[i_cell]:
+                for d in range(dim):
+                    cell_f[aux_i, d] = f[i_node, d]
+                    cell_acc[aux_i, d] = acc[i_node, d]
+                    cell_v[aux_i, d] = rk_v[i_node * dim + d, 0]
+                aux_i += 1
+
+            # Calculate current cell residual
+            cell_res = element.CalculateRightHandSide(cell_size[0], cell_size[1], cell_size[2], mu, rho, cell_v, cell_p, cell_f, cell_acc, cell_v)
+
+            # Assemble current cell residual
+            aux_i = 0
+            for i_node in cells[i_cell]:
+                for d in range(dim):
+                    rk_res[i_node * dim + d, rk_step] += cell_res[aux_i * dim + d]
+                aux_i += 1
+
+    for i in range(num_nodes):
+        for d in range(dim):
+            aux_i = i * dim + d
+            for rk_step in range(rk_num_steps):
+                v[i, d] += rk_B[rk_step] * rk_res[aux_i, rk_step]
+            v[i, d] *= dt * lumped_mass_vector[aux_i, 0]
+            v[i, d] += v_n[i, d]
 
     # Solve pressure update
 
