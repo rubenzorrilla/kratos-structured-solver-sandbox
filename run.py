@@ -93,6 +93,10 @@ for i_node in range(num_nodes):
         v[i_node, :] = [1.0,0.0,0.0]
         v_n[i_node, :] = [1.0,0.0,0.0]
 
+# Set forcing term
+for i_node in range(num_nodes):
+    f[i_node, :] = [1.0e1,0.0,0.0]
+
 print("Init v: ", v)
 print("Init v_n: ", v_n)
 

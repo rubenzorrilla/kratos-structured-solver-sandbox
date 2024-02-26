@@ -10,7 +10,7 @@ def GetOutstring(dim):
         outstring = "import math\n"
         outstring += "import numpy\n"
         outstring += "\n"
-        outstring += "def CalculateRightHandSide(a, b, c, mu, rho, v, p, f, acc, v_conv, stab_c1 = 4.0, stab_c2 = 2.0):\n"
+        outstring += "def CalculateRightHandSide(a, b, c, mu, rho, v, p, f, acc, v_conv):\n"
         outstring += f"    RHS = numpy.empty(8)\n"
         outstring += "#substitute_rhs_2d"
         outstring += "\n    return RHS"
@@ -18,7 +18,7 @@ def GetOutstring(dim):
         outstring = "import math\n"
         outstring += "import numpy\n"
         outstring += "\n"
-        outstring += "def CalculateRightHandSide(a, b, c, mu, rho, v, p, f, acc, v_conv, stab_c1 = 4.0, stab_c2 = 2.0):\n"
+        outstring += "def CalculateRightHandSide(a, b, c, mu, rho, v, p, f, acc, v_conv):\n"
         outstring += f"    RHS = numpy.empty(16)\n"
         outstring += "#substitute_rhs_3d"
         outstring += "\n    return RHS"
@@ -52,8 +52,8 @@ mu = sympy.Symbol('mu', positive=True)
 rho = sympy.Symbol('rho', positive=True)
 
 # Stabilization parameters
-stab_c1 = sympy.Symbol('stab_c1', positive=True)
-stab_c2 = sympy.Symbol('stab_c2', positive=True)
+stab_c1 = 4.0
+stab_c2 = 2.0
 
 # Unknown fields
 num_nodes = 4 if dim == 2 else 8
@@ -125,9 +125,8 @@ for g in range(len(quadrature)):
     stab_conv_term_2 = (rho * v_conv_g @ grad_w_g * v_subs)[0,0]
 
     # Add and differentiate the functional
-    # phi = forcing_term - conv_term - visc_term + pres_term
-    # phi += stab_conv_term_1 + stab_conv_term_2
-    phi = - visc_term
+    phi = forcing_term - conv_term - visc_term + pres_term
+    phi += stab_conv_term_1 + stab_conv_term_2
 
     for i in range(num_nodes):
         for d in range(dim):
