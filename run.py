@@ -2,6 +2,19 @@ import mesher
 import numpy as np
 import incompressible_navier_stokes_q1_p0_structured_element_2d as element
 
+def CalculateDeltaTime(cell_size, velocities, target_cfl):
+    max_v = 0.0
+    for v in velocities:
+        norm_v = np.linalg.norm(v)
+        if norm_v > max_v:
+            max_v = norm_v
+
+    dt_x = cell_size[0] * target_cfl / max_v
+    dt_y = cell_size[1] * target_cfl / max_v
+    dt_z = cell_size[2] * target_cfl / max_v if cell_size[2] > 1.0e-12 else 1.0e8
+
+    return min(dt_x, dt_y, dt_z)
+
 def GetButcherTableau():
     A = np.zeros((4,4))
     A[1,0] = 0.5
@@ -13,16 +26,16 @@ def GetButcherTableau():
 
 # Problem data
 dt = 0.1
-end_time = 1.0
+end_time = 0.05
 init_time = 0.0
 
 # Material data
-mu = 0.001
-rho = 1000.0
+mu = 1.0
+rho = 1.0
 
 # Mesh data
-box_size = [5.0,1.0,None]
-box_divisions = [5,5,None]
+box_size = [1.0,1.0,None]
+box_divisions = [10,1,None]
 cell_size = [i/j if i is not None else 0.0 for i, j in zip(box_size, box_divisions)]
 if box_size[2] == None:
     dim = 2
@@ -57,12 +70,34 @@ for cell in cells:
         for d in range(dim):
             lumped_mass_vector[node*dim + d] += mass_factor
 
+# Set velocity fixity vector (0: free ; 1: fixed)
+fixity = np.zeros((num_nodes*dim, 1), dtype=int)
+
+tol = 1.0e-6
+for i_node in range(num_nodes):
+    node = nodes[i_node]
+    if node[0] < tol:
+        fixity[i_node*dim] = 1
+    if ((node[1] < tol) or (node[1] > (1.0-tol))):
+        fixity[i_node*dim + 1] = 1
+
+# Set initial conditions
+for i_node in range(num_nodes):
+    node = nodes[i_node]
+    if node[0] < tol:
+        v[i_node, :] = [1.0,0.0,0.0]
+        v_n[i_node, :] = [1.0,0.0,0.0]
+
+print(v)
+print(v_n)
+
 # Time loop
 current_step = 1
-current_time = init_time + dt
+current_time = init_time
 rk_A, rk_B, rk_C = GetButcherTableau()
 while current_time < end_time:
-    print(f"### Step {current_step} - time {current_time} ###\n")
+    dt = CalculateDeltaTime(cell_size, v_n, 0.5)
+    print(f"### Step {current_step} - time {current_time} - dt {dt} ###\n")
 
     #TODO: IMPLEMENT FIXITY!!!
     # Solve intermediate velocity with RK scheme
@@ -122,8 +157,11 @@ while current_time < end_time:
     # Correct velocity
 
     # Output results
+    print(v)
+    print(v_n)
 
     # Update variables for next time step
+    v_n = v
     current_step += 1
     current_time += dt
 
