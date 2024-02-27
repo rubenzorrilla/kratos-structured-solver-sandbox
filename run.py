@@ -34,7 +34,7 @@ def GetButcherTableau():
     return A, B, C
 
 # Problem data
-end_time = 1.0e0
+end_time = 1.0e-2
 init_time = 0.0
 
 # Material data
@@ -67,7 +67,6 @@ output_model_part = model.CreateModelPart("OutputModelPart")
 fake_properties = output_model_part.CreateNewProperties(0)
 aux_id = 0
 for node in nodes:
-    print(node)
     aux_id += 1
     output_model_part.CreateNewNode(aux_id, node[0], node[1], 0.0)
 aux_id = 0
@@ -90,7 +89,7 @@ gid_output =  GiDOutputProcess(
                 },
                 "file_label": "time",
                 "output_control_type": "step",
-                "output_frequency": 1.0,
+                "output_interval": 1.0,
                 "body_output": true,
                 "node_output": false,
                 "skin_output": false,
@@ -147,13 +146,15 @@ for i_node in range(num_nodes):
 # Set initial conditions
 for i_node in range(num_nodes):
     node = nodes[i_node]
-    if node[0] < tol:
-        v[i_node, :] = [1.0,0.0,0.0]
-        v_n[i_node, :] = [1.0,0.0,0.0]
+    # if node[0] < tol:
+    #     v[i_node, :] = [1.0,0.0,0.0]
+    #     v_n[i_node, :] = [1.0,0.0,0.0]
+    v[i_node, :] = [1.0,0.0,0.0]
+    v_n[i_node, :] = [1.0,0.0,0.0]
 
 # Set forcing term
 for i_node in range(num_nodes):
-    f[i_node, :] = [0.0e1,0.0,0.0]
+    f[i_node, :] = [0.0,0.0,0.0]
 
 print("Init v: ", v)
 print("Init v_n: ", v_n)
@@ -174,22 +175,22 @@ current_step = 1
 current_time = init_time
 rk_A, rk_B, rk_C = GetButcherTableau()
 while current_time < end_time:
-    dt = CalculateDeltaTime(rho, mu, cell_size, v_n, 0.1, 0.1)
+    dt = CalculateDeltaTime(rho, mu, cell_size, v_n, 0.9, 0.9)
     print(f"### Step {current_step} - time {current_time} - dt {dt} ###\n")
 
-    # Solve intermediate velocity with RK scheme
-    rk_step_time = current_time
+    # Calculate intermediate residuals
     rk_num_steps = rk_C.shape[0]
     rk_res = np.zeros((num_nodes*dim, rk_num_steps))
     for rk_step in range(rk_num_steps):
-        # Calculate input values for current step residual calculation
-        rk_step_time += rk_C[rk_step]*dt
+        # Calculate current step velocity for residual calculation
+        rk_step_time = current_time + rk_C[rk_step] * dt
 
         rk_v = np.zeros((num_nodes*dim, 1))
         for a_ij in rk_A[rk_step, :rk_step]:
             for i in range(num_nodes):
                 for d in range(dim):
-                    rk_v[i*dim + d] = a_ij * rk_res[i * dim + d, rk_step]
+                    aux_i = i * dim + d
+                    rk_v[aux_i] = a_ij * rk_res[aux_i, rk_step]
 
         for i in range(num_nodes):
             for d in range(dim):
@@ -225,6 +226,7 @@ while current_time < end_time:
                     rk_res[i_node * dim + d, rk_step] += cell_res[aux_i * dim + d]
                 aux_i += 1
 
+    # Solve Runge-Kutta step
     for i in range(num_nodes):
         for d in range(dim):
             aux_i = i * dim + d
@@ -258,10 +260,6 @@ while current_time < end_time:
                 v[i, d] = v_n[i, d]
 
     # Output results
-    print("v: ", v)
-    print("v_n: ", v_n)
-
-    # Output results
     output_model_part.ProcessInfo[KratosMultiphysics.STEP] = current_step
     output_model_part.ProcessInfo[KratosMultiphysics.TIME] = current_time
     aux_id = 1
@@ -277,7 +275,7 @@ while current_time < end_time:
 
     # Update variables for next time step
     acc = (v - v_n) / dt
-    v_n = v
+    v_n = v.copy()
     current_step += 1
     current_time += dt
 
