@@ -34,16 +34,16 @@ def GetButcherTableau():
     return A, B, C
 
 # Problem data
-end_time = 1.0e-2
+end_time = 1.0e0
 init_time = 0.0
 
 # Material data
-mu = 1.0
-rho = 1.0
+mu = 1.81e-5
+rho = 1.293e0
 
 # Mesh data
 box_size = [1.0,1.0,None]
-box_divisions = [10,1,None]
+box_divisions = [10,2,None]
 cell_size = [i/j if i is not None else 0.0 for i, j in zip(box_size, box_divisions)]
 if box_size[2] == None:
     dim = 2
@@ -146,18 +146,13 @@ for i_node in range(num_nodes):
 # Set initial conditions
 for i_node in range(num_nodes):
     node = nodes[i_node]
-    # if node[0] < tol:
-    #     v[i_node, :] = [1.0,0.0,0.0]
-    #     v_n[i_node, :] = [1.0,0.0,0.0]
-    v[i_node, :] = [1.0,0.0,0.0]
-    v_n[i_node, :] = [1.0,0.0,0.0]
+    if node[0] < tol:
+        v[i_node, :] = [1.0,0.0,0.0]
+        v_n[i_node, :] = [1.0,0.0,0.0]
 
 # Set forcing term
 for i_node in range(num_nodes):
     f[i_node, :] = [0.0,0.0,0.0]
-
-print("Init v: ", v)
-print("Init v_n: ", v_n)
 
 # Set the matrix for the pressure problem
 # Note that the velocity fixity needs to be considered in the lumped mass operator in here
@@ -186,11 +181,12 @@ while current_time < end_time:
         rk_step_time = current_time + rk_C[rk_step] * dt
 
         rk_v = np.zeros((num_nodes*dim, 1))
-        for a_ij in rk_A[rk_step, :rk_step]:
+        for i_step in range(rk_step):
+            a_ij = rk_A[rk_step, i_step]
             for i in range(num_nodes):
                 for d in range(dim):
                     aux_i = i * dim + d
-                    rk_v[aux_i] = a_ij * rk_res[aux_i, rk_step]
+                    rk_v[aux_i] += a_ij * rk_res[aux_i, i_step]
 
         for i in range(num_nodes):
             for d in range(dim):
@@ -209,11 +205,11 @@ while current_time < end_time:
             cell_f = np.empty((4 if dim == 2 else 8, dim))
             cell_acc = np.empty((4 if dim == 2 else 8, dim))
             aux_i = 0
-            for i_node in cells[i_cell]:
+            for id_node in cells[i_cell]:
                 for d in range(dim):
-                    cell_f[aux_i, d] = f[i_node, d]
-                    cell_acc[aux_i, d] = acc[i_node, d]
-                    cell_v[aux_i, d] = rk_v[i_node * dim + d, 0]
+                    cell_f[aux_i, d] = f[id_node, d]
+                    cell_acc[aux_i, d] = acc[id_node, d]
+                    cell_v[aux_i, d] = rk_v[id_node * dim + d, 0]
                 aux_i += 1
 
             # Calculate current cell residual
@@ -221,9 +217,9 @@ while current_time < end_time:
 
             # Assemble current cell residual
             aux_i = 0
-            for i_node in cells[i_cell]:
+            for id_node in cells[i_cell]:
                 for d in range(dim):
-                    rk_res[i_node * dim + d, rk_step] += cell_res[aux_i * dim + d]
+                    rk_res[id_node * dim + d, rk_step] += cell_res[aux_i * dim + d]
                 aux_i += 1
 
     # Solve Runge-Kutta step
@@ -258,6 +254,9 @@ while current_time < end_time:
                     v[i, d] += dt * gradient_operator[aux_i,j] * delta_p[j,0] / lumped_mass_vector[aux_i,0]
             else:
                 v[i, d] = v_n[i, d]
+
+    print(f"v: ", v)
+    print(f"p: ", p)
 
     # Output results
     output_model_part.ProcessInfo[KratosMultiphysics.STEP] = current_step
