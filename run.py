@@ -43,7 +43,7 @@ rho = 1.293e0
 
 # Mesh data
 box_size = [1.0,1.0,None]
-box_divisions = [10,2,None]
+box_divisions = [10,10,None]
 cell_size = [i/j if i is not None else 0.0 for i, j in zip(box_size, box_divisions)]
 if box_size[2] == None:
     dim = 2
@@ -140,6 +140,7 @@ for i_node in range(num_nodes):
     node = nodes[i_node]
     if node[0] < tol:
         fixity[i_node*dim] = 1
+        fixity[i_node*dim + 1] = 1
     if ((node[1] < tol) or (node[1] > (1.0-tol))):
         fixity[i_node*dim + 1] = 1
 
@@ -259,6 +260,7 @@ while current_time < end_time:
     print(f"p: ", p)
 
     # Output results
+    output_model_part.CloneTimeStep(current_time)
     output_model_part.ProcessInfo[KratosMultiphysics.STEP] = current_step
     output_model_part.ProcessInfo[KratosMultiphysics.TIME] = current_time
     aux_id = 1
@@ -277,6 +279,9 @@ while current_time < end_time:
     v_n = v.copy()
     current_step += 1
     current_time += dt
+
+    if current_step > 0:
+        break
 
 # Finalize results
 gid_output.ExecuteFinalize()

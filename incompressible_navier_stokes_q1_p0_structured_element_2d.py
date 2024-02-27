@@ -68,10 +68,10 @@ def CalculateRightHandSide(a, b, c, mu, rho, v, p, f, acc, v_conv):
     cRHS62 = rho*(cRHS61 + 0.622008467928146*f[1,0] + 0.0446581987385205*f[3,0])
     cRHS63 = 0.166666666666667*acc[0,0] + 0.166666666666667*acc[2,0]
     cRHS64 = 0.622008467928146*acc[1,0] + 0.0446581987385205*acc[3,0] + cRHS63
-    cRHS65 = 1.0*cRHS50
+    cRHS65 = cRHS36*cRHS50
     cRHS66 = cRHS65*v[0,1]
     cRHS67 = cRHS65*v[2,1]
-    cRHS68 = -1.0*cRHS10*cRHS4*v[1,1] - 1.0*cRHS10*cRHS4*v[3,1] + cRHS66 + cRHS67
+    cRHS68 = -1.0*cRHS10*cRHS4*mu*v[1,1] - 1.0*cRHS10*cRHS4*mu*v[3,1] + cRHS66 + cRHS67
     cRHS69 = cRHS55*(-cRHS60 - cRHS62 + cRHS64*rho - cRHS68)
     cRHS70 = 0.131445855765802*v_conv[0,0]
     cRHS71 = 0.131445855765802*v_conv[2,0]
@@ -171,7 +171,7 @@ def CalculateRightHandSide(a, b, c, mu, rho, v, p, f, acc, v_conv):
     cRHS165 = 0.622008467928146*acc[1,1] + 0.0446581987385205*acc[3,1] + cRHS164
     cRHS166 = cRHS65*v[0,0]
     cRHS167 = cRHS65*v[2,0]
-    cRHS168 = -1.0*cRHS10*cRHS4*v[1,0] - 1.0*cRHS10*cRHS4*v[3,0] + cRHS166 + cRHS167
+    cRHS168 = -1.0*cRHS10*cRHS4*mu*v[1,0] - 1.0*cRHS10*cRHS4*mu*v[3,0] + cRHS166 + cRHS167
     cRHS169 = cRHS55*(-cRHS161 - cRHS163 + cRHS165*rho - cRHS168)
     cRHS170 = rho*(cRHS131*cRHS79 + cRHS136*cRHS78)
     cRHS171 = rho*(cRHS162 + 0.0446581987385205*f[1,1] + 0.622008467928146*f[3,1])

@@ -128,7 +128,7 @@ for g in range(len(quadrature)):
     v_subs_visc_term = sympy.Matrix(2, 1, lambda i, j : 0.0)
     for i in range(num_nodes):
         DDN_DDX_i = DDN_DDX[i,:,:]
-        v_subs_visc_term += DDN_DDX_i@(v[i,:]).transpose()
+        v_subs_visc_term += mu*DDN_DDX_i@(v[i,:]).transpose()
     v_subs = tau * (v_subs_forcing_term - v_subs_inertial_term - v_subs_conv_term + v_subs_visc_term)
 
     # Calculate Gauss point stabilization functional terms
