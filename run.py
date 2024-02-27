@@ -132,24 +132,24 @@ for i_cell in range(cells.shape[0]):
             divergence_operator[i_cell, node*dim + d] = cell_gradient_operator[i_node*dim + d]
         i_node += 1
 
-# Set velocity fixity vector (0: free ; 1: fixed)
+# Set velocity fixity vector (0: free ; 1: fixed) and BCs
 fixity = np.zeros((num_nodes*dim, 1), dtype=int)
 
 tol = 1.0e-6
 for i_node in range(num_nodes):
     node = nodes[i_node]
-    if node[0] < tol:
-        fixity[i_node*dim] = 1
-        fixity[i_node*dim + 1] = 1
-    if ((node[1] < tol) or (node[1] > (1.0-tol))):
-        fixity[i_node*dim + 1] = 1
+    if node[0] < tol: # Inlet
+        fixity[i_node*dim] = 1 # x-velocity
+        fixity[i_node*dim + 1] = 1 # y-velocity
+        v[i_node, :] = [1.0,0.0,0.0]
+        v_n[i_node, :] = [1.0,0.0,0.0]
+    if ((node[1] < tol) or (node[1] > (1.0-tol))): # Top and bottom walls
+        fixity[i_node*dim + 1] = 1 # y-velocity
 
 # Set initial conditions
 for i_node in range(num_nodes):
-    node = nodes[i_node]
-    if node[0] < tol:
-        v[i_node, :] = [1.0,0.0,0.0]
-        v_n[i_node, :] = [1.0,0.0,0.0]
+    v[i_node, :] = [1.0,0.0,0.0]
+    v_n[i_node, :] = [1.0,0.0,0.0]
 
 # Set forcing term
 for i_node in range(num_nodes):
