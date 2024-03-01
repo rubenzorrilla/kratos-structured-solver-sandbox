@@ -33,12 +33,18 @@ def GetButcherTableau():
     A[1,0] = 0.5
     A[2,1] = 0.5
     A[3,2] = 1.0
-    B = np.array([0.0, 0.5, 0.5, 1.0])
-    C = np.array([1.0/6.0, 1.0/3.0, 1.0/3.0, 1.0/6.0])
+    B = np.array([1.0/6.0, 1.0/3.0, 1.0/3.0, 1.0/6.0])
+    C = np.array([0.0, 0.5, 0.5, 1.0])
     return A, B, C
 
+# def GetButcherTableau():
+#     A = np.zeros((0,0))
+#     B = np.array([1.0])
+#     C = np.array([0.0])
+#     return A, B, C
+
 # Problem data
-end_time = 5.0e-1
+end_time = 1.0e1
 init_time = 0.0
 
 # Material data
@@ -99,7 +105,7 @@ gid_output =  GiDOutputProcess(
                 "skin_output": false,
                 "plane_output": [],
                 "nodal_results": [],
-                "nodal_nonhistorical_results": ["VELOCITY","ACCELERATION","VOLUME_ACCELERATION"],
+                "nodal_nonhistorical_results": ["VELOCITY","ACCELERATION","VOLUME_ACCELERATION","NODAL_AREA"],
                 "nodal_flags_results": [],
                 "gauss_point_results": [],
                 "additional_list_files": []
@@ -139,7 +145,7 @@ for i_cell in range(cells.shape[0]):
 # Set initial conditions
 for i_node in range(num_nodes):
     v[i_node, :] = [0.0,0.0,0.0]
-    v_n[i_node, :] = [1.0,0.0,0.0]
+    v_n[i_node, :] = [0.0,0.0,0.0]
     #y_coord = nodes[i_node][1]
     #v[i_node, :] = [4.0*y_coord*(1.0-y_coord),0.0,0.0]
     #v_n[i_node, :] = [4.0*y_coord*(1.0-y_coord),0.0,0.0]
@@ -275,6 +281,7 @@ while current_time < end_time:
         output_model_part.GetNode(aux_id).SetValue(KratosMultiphysics.VELOCITY, v[i_node, :])
         output_model_part.GetNode(aux_id).SetValue(KratosMultiphysics.ACCELERATION, acc[i_node, :])
         output_model_part.GetNode(aux_id).SetValue(KratosMultiphysics.VOLUME_ACCELERATION, f[i_node, :])
+        output_model_part.GetNode(aux_id).SetValue(KratosMultiphysics.NODAL_AREA, lumped_mass_vector[i_node*dim, 0])
         aux_id += 1
 
     gid_output.ExecuteInitializeSolutionStep()
@@ -286,9 +293,6 @@ while current_time < end_time:
     v_n = v.copy()
     current_step += 1
     current_time += dt
-
-    if current_step > 3:
-        break
 
 # Finalize results
 gid_output.ExecuteFinalize()

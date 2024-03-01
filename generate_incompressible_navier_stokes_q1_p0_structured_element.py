@@ -144,12 +144,12 @@ for g in range(len(quadrature)):
             rhs_i_d = sympy.diff(phi, w[i,d])
             if do_simplify:
                 rhs_i_d = sympy.simplify(rhs_i_d)
-            RHS[i*dim + d] += gauss_weight * rhs_i_d
+            RHS[i*dim + d] += weight * rhs_i_d
 
     # Add gradient (and divergence) operator contribution
     for i in range(num_nodes):
         for d in range(dim):
-            G[i*dim + d, 0] += gauss_weight * DN_DX[i,d]
+            G[i*dim + d, 0] += weight * DN_DX[i,d]
 
 RHS_output = KratosSympy.OutputVector_CollectingFactors(RHS, "RHS", "python", indentation_level=1, replace_indices=True, assignment_op=" = ")
 G_output = KratosSympy.OutputVector_CollectingFactors(G, "G", "python", indentation_level=1, replace_indices=True, assignment_op=" = ")
