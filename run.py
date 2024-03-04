@@ -1,5 +1,8 @@
 import mesher
 import numpy as np
+import numpy.fft
+import scipy
+import scipy.linalg
 import incompressible_navier_stokes_q1_p0_structured_element_2d as element
 
 import KratosMultiphysics
@@ -52,8 +55,8 @@ mu = 1.81e-5
 rho = 1.293e0
 
 # Mesh data
-box_size = [1.0,1.0,None]
-box_divisions = [3,2,None]
+box_size = [5.0,1.0,None]
+box_divisions = [10,10,None]
 cell_size = [i/j if i is not None else 0.0 for i, j in zip(box_size, box_divisions)]
 if box_size[2] == None:
     dim = 2
@@ -116,7 +119,7 @@ gid_output.ExecuteInitialize()
 gid_output.ExecuteBeforeSolutionLoop()
 
 # Create mesh dataset
-p = np.zeros((num_cells, 1))
+p = np.zeros((num_cells))
 f = np.zeros((num_nodes, 3))
 v = np.zeros((num_nodes, 3))
 v_n = np.zeros((num_nodes, 3))
@@ -160,8 +163,11 @@ for i_node in range(num_nodes):
     if node[0] < tol: # Inlet
         fixity[i_node*dim] = 1 # x-velocity
         fixity[i_node*dim + 1] = 1 # y-velocity
-        v[i_node, :] = [1.0,0.0,0.0]
-        v_n[i_node, :] = [1.0,0.0,0.0]
+        # v[i_node, :] = [1.0,0.0,0.0]
+        # v_n[i_node, :] = [1.0,0.0,0.0]
+        y_coord = nodes[i_node][1]
+        v[i_node, :] = [4.0*y_coord*(1.0-y_coord),0.0,0.0]
+        v_n[i_node, :] = [4.0*y_coord*(1.0-y_coord),0.0,0.0]
     if ((node[1] < tol) or (node[1] > (1.0-tol))): # Top and bottom walls
         fixity[i_node*dim + 1] = 1 # y-velocity
 
@@ -171,14 +177,39 @@ for i_node in range(num_nodes):
 
 # Set the matrix for the pressure problem
 # Note that the velocity fixity needs to be considered in the lumped mass operator in here
-#TODO: To be removed as soon as we have the CG with linear operator
-pressure_matrix = np.zeros((num_cells, num_cells))
-for i in range(num_cells):
-    for j in range(num_cells):
-        for m in range(num_nodes*dim):
-            if fixity[m] == 0:
-                pressure_matrix[i,j] += divergence_operator[i,m] * gradient_operator[m,j] / lumped_mass_vector[m,0]
-pressure_matrix_inv = np.linalg.inv(pressure_matrix)
+# Create the linear operator for the CG solving pressure problem
+# Note that the velocity fixity needs to be considered in the lumped mass operator in here
+lumped_mass_vector_inv = np.zeros(lumped_mass_vector.shape[0])
+for m in range(num_nodes*dim):
+    if fixity[m] == 0:
+        lumped_mass_vector_inv[m] = 1.0 / lumped_mass_vector[m,0]
+def prod(x):
+    return (divergence_operator*lumped_mass_vector_inv)@(gradient_operator)@x
+pressure_op = scipy.sparse.linalg.LinearOperator((num_cells,num_cells), matvec=prod)
+
+# Create the preconditioner for the CG solving the pressure problem
+c_row = box_divisions[0] + 3
+c_aux = ((divergence_operator*lumped_mass_vector_inv)@gradient_operator)[c_row,:]
+c = np.zeros(c_aux.shape[0])
+for i in range(c_aux.shape[0]):
+    c[i-c_row] = c_aux[i]
+
+fft_c = np.fft.fft(c)
+def apply_precond(r):
+    # print(np.linalg.norm(r))
+
+    fft_r = np.fft.fft(r)
+    return np.fft.ifft(fft_r/fft_c)
+
+    # b = scipy.linalg.circulant(c)
+    # x = scipy.sparse.linalg.lsqr(b, r)
+    # return x[0]
+
+    # return scipy.linalg.solve_circulant(c, r, singular='lstsq')
+
+    # x, _ = scipy.sparse.linalg.gmres(pressure_op, r, atol=1.0e-14)
+    # return x
+precond = scipy.sparse.linalg.LinearOperator((num_cells, num_cells), matvec=apply_precond)
 
 # Time loop
 current_step = 1
@@ -252,14 +283,20 @@ while current_time < end_time:
                 v[i, d] += v_n[i, d]
 
     # Solve pressure update
-    delta_p_rhs = np.zeros((num_cells, 1))
+    delta_p_rhs = np.zeros((num_cells))
     for i in range(num_cells):
         for j in range(num_nodes):
             for d in range(dim):
-                delta_p_rhs[i,0] -= divergence_operator[i, j*dim + d] * v[j, d]
+                delta_p_rhs[i] -= divergence_operator[i, j*dim + d] * v[j, d]
     delta_p_rhs /= dt
-    delta_p = pressure_matrix_inv @ delta_p_rhs
+
+    iters = 0
+    def nonlocal_iterate(arr):
+        global iters
+        iters += 1
+    delta_p, converged = scipy.sparse.linalg.cg(pressure_op, delta_p_rhs, tol=1.0e-10, callback=nonlocal_iterate, M=None)
     p += delta_p
+    print(f"Iters: {iters}")
 
     # Correct velocity
     for i in range(num_nodes):
@@ -267,10 +304,10 @@ while current_time < end_time:
             aux_i = i * dim + d
             if fixity[aux_i] == 0:
                 for j in range(num_cells):
-                    v[i, d] += dt * gradient_operator[aux_i,j] * delta_p[j,0] / lumped_mass_vector[aux_i,0]
+                    v[i, d] += dt * gradient_operator[aux_i,j] * delta_p[j] / lumped_mass_vector[aux_i,0]
 
-    print(f"v: ", v)
-    print(f"p: ", p)
+    # print(f"v: ", v)
+    # print(f"p: ", p)
 
     # Output results
     output_model_part.CloneTimeStep(current_time)
