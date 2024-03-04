@@ -257,7 +257,7 @@ while current_time < end_time:
         for j in range(num_nodes):
             for d in range(dim):
                 delta_p_rhs[i,0] -= divergence_operator[i, j*dim + d] * v[j, d]
-    delta_p_rhs *= dt
+    delta_p_rhs /= dt
     delta_p = pressure_matrix_inv @ delta_p_rhs
     p += delta_p
 
