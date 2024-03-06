@@ -195,11 +195,12 @@ for i in range(c_aux.shape[0]):
     c[i-c_row] = c_aux[i]
 
 fft_c = np.fft.fft(c)
+fft_c[0] = 1.0
 def apply_precond(r):
     # print(np.linalg.norm(r))
 
     fft_r = np.fft.fft(r)
-    return np.fft.ifft(fft_r/fft_c)
+    return np.real(np.fft.ifft(fft_r/fft_c))
 
     # b = scipy.linalg.circulant(c)
     # x = scipy.sparse.linalg.lsqr(b, r)
@@ -294,7 +295,7 @@ while current_time < end_time:
     def nonlocal_iterate(arr):
         global iters
         iters += 1
-    delta_p, converged = scipy.sparse.linalg.cg(pressure_op, delta_p_rhs, tol=1.0e-10, callback=nonlocal_iterate, M=None)
+    delta_p, converged = scipy.sparse.linalg.cg(pressure_op, delta_p_rhs, tol=1.0e-6, callback=nonlocal_iterate, M=precond)
     p += delta_p
     print(f"Iters: {iters}")
 
