@@ -115,8 +115,4 @@ def CalculatePressureOperatorStencil(dim, a, b , c):
             P[i,j] = P[i,j].subs(b_aux, b)
             P[i,j] = P[i,j].subs(c_aux, c)
 
-    return P
-
-P = CalculatePressureOperatorStencil(2, 0.2, 0.2, None)
-print(P[4,:])
-
+    return P[4,:] # Return the row corresponding to the center cell
