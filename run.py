@@ -55,8 +55,8 @@ mu = 1.81e-5
 rho = 1.293e0
 
 # Mesh data
-box_size = [5.0,1.0,None]
-box_divisions = [10,10,None]
+box_size = [1.0,1.0,None]
+box_divisions = [3,3,None]
 cell_size = [i/j if i is not None else 0.0 for i, j in zip(box_size, box_divisions)]
 if box_size[2] == None:
     dim = 2
@@ -188,14 +188,14 @@ def prod(x):
 pressure_op = scipy.sparse.linalg.LinearOperator((num_cells,num_cells), matvec=prod)
 
 # Create the preconditioner for the CG solving the pressure problem
-c_row = box_divisions[0] + 3
+c_row = box_divisions[0] + 3 # Note that we take a row "in the middle"
 c_aux = ((divergence_operator*lumped_mass_vector_inv)@gradient_operator)[c_row,:]
 c = np.zeros(c_aux.shape[0])
 for i in range(c_aux.shape[0]):
     c[i-c_row] = c_aux[i]
 
 fft_c = np.fft.fft(c)
-fft_c[0] = 1.0
+fft_c[0] = 1.0 # Remove the first mode as this is associated to the solution average
 def apply_precond(r):
     # print(np.linalg.norm(r))
 
