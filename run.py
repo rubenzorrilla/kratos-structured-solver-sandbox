@@ -54,8 +54,8 @@ mu = 1.81e-5
 rho = 1.293e0
 
 # Mesh data
-box_size = [2.0,1.0,None]
-box_divisions = [20,10,None]
+box_size = [5.0,1.0,None]
+box_divisions = [10,10,None]
 cell_size = [i/j if i is not None else 0.0 for i, j in zip(box_size, box_divisions)]
 if box_size[2] == None:
     dim = 2
@@ -192,7 +192,7 @@ def ApplyPressureOperator(x, lumped_mass_vector_inv, gradient_operator):
 # But we can replace this null coefficient by anything different from 0.
 # At most it would degrade the convergence of the PCG, but we will see that the convergence is OK.
 x = np.zeros((num_cells))
-c_row = int(box_divisions[0] * (box_divisions[1] / 2))
+c_row = int(box_divisions[0] * (box_divisions[1] / 2) + box_divisions[0] / 2) # We take the cell in the center of the domain
 x[c_row] = 1.0
 y = ApplyPressureOperator(x, lumped_mass_vector_inv, gradient_operator)
 
