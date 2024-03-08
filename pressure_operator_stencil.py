@@ -3,7 +3,7 @@ import numpy as np
 
 import generate_incompressible_navier_stokes_q1_p0_structured_element as generator
 
-def CalculatePressureOperatorStencil(dim, a, b , c):
+def CalculatePressureOperatorStencil(dim, a, b, c, lumped_mass_vector):
 
     # Define cell data
     a_aux = sympy.Symbol('a', positive = True)
@@ -65,8 +65,6 @@ def CalculatePressureOperatorStencil(dim, a, b , c):
     quadrature = kinematics_module.GetGaussQuadrature(integration_order)
 
     G = sympy.Matrix(num_nodes * dim, num_cells, lambda i, j : 0.0)
-    lumped_mass_factor = a * b / 4.0 if dim == 2 else a * b * c / 8.0
-    lumped_mass_vector = sympy.Matrix(num_nodes * dim, 1, lambda i, _ : 0.0)
     for i_cell in range(num_cells):
         # Calculate current cell nodal coordinates for the kinematics calculation
         cell = cells[i_cell]
@@ -97,17 +95,14 @@ def CalculatePressureOperatorStencil(dim, a, b , c):
         for node in cell:
             for d in range(dim):
                 G[node*dim + d, i_cell] += G_cell[i_node*dim + d]
-                lumped_mass_vector[node*dim + d, 0] += lumped_mass_factor
             i_node += 1
 
     G = sympy.simplify(G)
-    lumped_mass_vector = sympy.simplify(lumped_mass_vector)
-
     P = sympy.Matrix(num_cells, num_cells, lambda i, j : 0.0)
     for i in range(num_cells):
         for j in range(num_cells):
             for k in range(num_nodes*dim):
-                P[i,j] += G[k,i] * G[k,j] / lumped_mass_vector[k,0]
+                P[i,j] += G[k,i] * G[k,j] / lumped_mass_vector[k]
 
     for i in range(num_cells):
         for j in range(num_cells):
