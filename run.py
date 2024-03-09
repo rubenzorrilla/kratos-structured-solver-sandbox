@@ -9,10 +9,9 @@ from KratosMultiphysics.gid_output_process import GiDOutputProcess
 
 def CalculateDeltaTime(rho, mu, cell_size, velocities, target_cfl, target_fourier):
     max_v = 0.0
-    for v in velocities:
-        norm_v = np.linalg.norm(v)
-        if norm_v > max_v:
-            max_v = norm_v
+
+    #calculate max cell velocity
+    max_v = np.max(np.linalg.norm(velocities,axis=1))
 
     tol = 1.0e-12
     if max_v < tol:
@@ -125,9 +124,11 @@ v_n = np.zeros((num_nodes, 3))
 acc = np.zeros((num_nodes, 3))
 
 # Set initial conditions
-for i_node in range(num_nodes):
-    v[i_node, :] = [0.0,0.0,0.0]
-    v_n[i_node, :] = [0.0,0.0,0.0]
+v.fill(0.)
+v_n.fill(0.)
+# for i_node in range(num_nodes):
+#     v[i_node, :] = [0.0,0.0,0.0]
+#     v_n[i_node, :] = [0.0,0.0,0.0]
     #y_coord = nodes[i_node][1]
     #v[i_node, :] = [4.0*y_coord*(1.0-y_coord),0.0,0.0]
     #v_n[i_node, :] = [4.0*y_coord*(1.0-y_coord),0.0,0.0]
@@ -151,19 +152,33 @@ for i_node in range(num_nodes):
         fixity[i_node*dim + 1] = 1 # y-velocity
 
 # Set forcing term
-for i_node in range(num_nodes):
-    f[i_node, :] = [0.0,0.0,0.0]
+f.fill(0.)
+# for i_node in range(num_nodes):
+#     f[i_node, :] = [0.0,0.0,0.0]
 
 # Calculate auxiliary operators
 cell_domain_size = np.prod(cell_size[:dim])
 mass_factor = (rho*cell_domain_size) / (4.0 if dim == 2 else 8.0)
+# lumped_mass_vector = np.zeros((num_nodes * dim))
+# for cell in cells:
+#     for node in cell:
+#         for d in range(dim):
+#             lumped_mass_vector[node*dim + d] += mass_factor
+
+def AssembleMass(cell,destination):
+    ids = cell.copy()*dim
+    for d in range(dim):
+        destination[ids] += mass_factor
+        ids[:]+=1
 lumped_mass_vector = np.zeros((num_nodes * dim))
-for cell in cells:
-    for node in cell:
-        for d in range(dim):
-            lumped_mass_vector[node*dim + d] += mass_factor
-lumped_mass_vector_inv = [1.0 / lumped_mass for lumped_mass in lumped_mass_vector]
-lumped_mass_vector_inv_bcs = [1.0 / lumped_mass_vector[i] if fixity[i] == 0 else 0.0 for i in range(lumped_mass_vector.shape[0])]
+np.apply_along_axis(AssembleMass,0,cells,lumped_mass_vector)
+
+lumped_mass_vector_inv = 1.0/lumped_mass_vector
+
+lumped_mass_vector_inv_bcs = lumped_mass_vector_inv.copy()
+fix_ids = (fixity==1).nonzero()[0]
+lumped_mass_vector_inv_bcs[fix_ids] = 0.0
+#lumped_mass_vector_inv_bcs = [1.0 / lumped_mass_vector[i] if fixity[i] == 0 else 0.0 for i in range(lumped_mass_vector.shape[0])]
 
 cell_gradient_operator = element.GetCellGradientOperator(cell_size[0], cell_size[1], cell_size[2])
 gradient_operator = np.zeros((num_nodes * dim, num_cells))
@@ -233,22 +248,32 @@ while current_time < end_time:
         rk_theta = rk_C[rk_step]
         rk_step_time = current_time + rk_theta * dt
 
-        rk_v = np.zeros((num_nodes*dim, 1))
+        rk_v = np.zeros(num_nodes*dim) #(num_nodes*dim, 1))
         for i_step in range(rk_step):
             a_ij = rk_A[rk_step, i_step]
-            for i in range(num_nodes):
-                for d in range(dim):
-                    aux_i = i * dim + d
-                    rk_v[aux_i] += a_ij * rk_res[aux_i, i_step]
+            rk_v += a_ij*rk_res[:,i_step]
+            # for i in range(num_nodes):
+            #     for d in range(dim):
+            #         aux_i = i * dim + d
+            #         rk_v[aux_i] += a_ij * rk_res[aux_i, i_step]
 
-        for i in range(num_nodes):
-            for d in range(dim):
-                aux_i = i * dim + d
-                if fixity[aux_i] == 0:
-                    rk_v[aux_i] *= dt / lumped_mass_vector[aux_i]
-                    rk_v[aux_i] += v_n[i,d]
-                else:
-                    rk_v[aux_i] = rk_theta * v[i,d] + (1.0 - rk_theta) * v_n[i,d]
+
+
+        rk_v *= dt*lumped_mass_vector_inv
+        rk_v += v_n[:,0:dim].flat
+        #on fixed lines:
+        rk_v[fix_ids] = rk_theta*(v[:,0:dim].flat)[fix_ids] + (1.0 - rk_theta) * v_n[:,0:dim].flat[fix_ids]
+        print("rk_v.shape",rk_v.shape)
+        print("lumped_mass_vector_inv.shape",lumped_mass_vector_inv.shape)
+        print("v_n.flat.shape",np.array(v_n.flat))
+        # for i in range(num_nodes):
+        #     for d in range(dim):
+        #         aux_i = i * dim + d
+        #         if fixity[aux_i] == 0:
+        #             rk_v[aux_i] *= dt / lumped_mass_vector[aux_i]
+        #             rk_v[aux_i] += v_n[i,d]
+        #         else:
+        #             rk_v[aux_i] = rk_theta * v[i,d] + (1.0 - rk_theta) * v_n[i,d]
 
         # Calculate current step residual
         for i_cell in range(num_cells):
