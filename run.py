@@ -118,10 +118,10 @@ gid_output.ExecuteBeforeSolutionLoop()
 
 # Create mesh dataset
 p = np.zeros((num_cells))
-f = np.zeros((num_nodes, 3))
-v = np.zeros((num_nodes, 3))
-v_n = np.zeros((num_nodes, 3))
-acc = np.zeros((num_nodes, 3))
+f = np.zeros((num_nodes, dim))
+v = np.zeros((num_nodes, dim))
+v_n = np.zeros((num_nodes, dim))
+acc = np.zeros((num_nodes, dim))
 
 # Set initial conditions
 v.fill(0.)
@@ -146,8 +146,8 @@ for i_node in range(num_nodes):
         # v[i_node, :] = [1.0,0.0,0.0]
         # v_n[i_node, :] = [1.0,0.0,0.0]
         y_coord = nodes[i_node][1]
-        v[i_node, :] = [4.0*y_coord*(1.0-y_coord),0.0,0.0]
-        v_n[i_node, :] = [4.0*y_coord*(1.0-y_coord),0.0,0.0]
+        v[i_node, 0] = 4.0*y_coord*(1.0-y_coord)
+        v_n[i_node, 0] = 4.0*y_coord*(1.0-y_coord)
     if ((node[1] < tol) or (node[1] > (1.0-tol))): # Top and bottom walls
         fixity[i_node*dim + 1] = 1 # y-velocity
 
@@ -262,10 +262,7 @@ while current_time < end_time:
         rk_v *= dt*lumped_mass_vector_inv
         rk_v += v_n[:,0:dim].flat
         #on fixed lines:
-        rk_v[fix_ids] = rk_theta*(v[:,0:dim].flat)[fix_ids] + (1.0 - rk_theta) * v_n[:,0:dim].flat[fix_ids]
-        print("rk_v.shape",rk_v.shape)
-        print("lumped_mass_vector_inv.shape",lumped_mass_vector_inv.shape)
-        print("v_n.flat.shape",np.array(v_n.flat))
+        rk_v[fix_ids] = rk_theta*(v.flat)[fix_ids] + (1.0 - rk_theta) * v_n.flat[fix_ids]
         # for i in range(num_nodes):
         #     for d in range(dim):
         #         aux_i = i * dim + d
@@ -283,11 +280,11 @@ while current_time < end_time:
             cell_f = np.empty((4 if dim == 2 else 8, dim))
             cell_acc = np.empty((4 if dim == 2 else 8, dim))
             aux_i = 0
+            rk_v_as_matrix = rk_v.reshape(v.shape[0],dim)
             for id_node in cells[i_cell]:
-                for d in range(dim):
-                    cell_f[aux_i, d] = f[id_node, d]
-                    cell_acc[aux_i, d] = acc[id_node, d]
-                    cell_v[aux_i, d] = rk_v[id_node * dim + d, 0]
+                cell_f[aux_i, :] = f[id_node, :]
+                cell_acc[aux_i, :] = acc[id_node, :]
+                cell_v[aux_i, :] = rk_v_as_matrix[id_node,:]
                 aux_i += 1
 
             # Calculate current cell residual
@@ -347,12 +344,16 @@ while current_time < end_time:
     output_model_part.ProcessInfo[KratosMultiphysics.STEP] = current_step
     output_model_part.ProcessInfo[KratosMultiphysics.TIME] = current_time
     aux_id = 1
-    for i_node in range(num_nodes):
-        output_model_part.GetNode(aux_id).SetValue(KratosMultiphysics.VELOCITY, v[i_node, :])
-        output_model_part.GetNode(aux_id).SetValue(KratosMultiphysics.ACCELERATION, acc[i_node, :])
-        output_model_part.GetNode(aux_id).SetValue(KratosMultiphysics.VOLUME_ACCELERATION, f[i_node, :])
-        output_model_part.GetNode(aux_id).SetValue(KratosMultiphysics.NODAL_AREA, lumped_mass_vector[i_node*dim])
-        aux_id += 1
+
+    KratosMultiphysics.VariableUtils().SetValuesVector(output_model_part.Nodes,KratosMultiphysics.VELOCITY_X,v[:,0])
+    KratosMultiphysics.VariableUtils().SetValuesVector(output_model_part.Nodes,KratosMultiphysics.VELOCITY_Y,v[:,1])
+
+    # for i_node in range(num_nodes):
+    #     output_model_part.GetNode(aux_id).SetValue(KratosMultiphysics.VELOCITY, v[i_node, :])
+    #     output_model_part.GetNode(aux_id).SetValue(KratosMultiphysics.ACCELERATION, acc[i_node, :])
+    #     output_model_part.GetNode(aux_id).SetValue(KratosMultiphysics.VOLUME_ACCELERATION, f[i_node, :])
+    #     output_model_part.GetNode(aux_id).SetValue(KratosMultiphysics.NODAL_AREA, lumped_mass_vector[i_node*dim])
+    #     aux_id += 1
 
     gid_output.ExecuteInitializeSolutionStep()
     gid_output.PrintOutput()
