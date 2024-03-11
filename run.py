@@ -125,60 +125,67 @@ v_n.fill(0.0)
 
 # Set velocity fixity vector (0: free ; 1: fixed) and BCs
 # Note that these overwrite the initial conditions above
-fixity = np.zeros(num_nodes*dim, dtype=int)
+fixity = np.zeros((num_nodes,dim), dtype=int)
 
 tol = 1.0e-6
 for i_node in range(num_nodes):
     node = nodes[i_node]
     if node[0] < tol: # Inlet
-        fixity[i_node*dim] = 1 # x-velocity
-        fixity[i_node*dim + 1] = 1 # y-velocity
+        fixity[i_node, 0] = 1 # x-velocity
+        fixity[i_node, 1] = 1 # y-velocity
         # v[i_node, 0] = 1.0
         # v_n[i_node, 0] = 1.0
         y_coord = nodes[i_node][1]
         v[i_node, 0] = 4.0*y_coord*(1.0-y_coord)
         v_n[i_node, 0] = 4.0*y_coord*(1.0-y_coord)
     if ((node[1] < tol) or (node[1] > (1.0-tol))): # Top and bottom walls
-        fixity[i_node*dim + 1] = 1 # y-velocity
+        fixity[i_node, 1] = 1 # y-velocity
 
-fix_rows = (fixity == 1).nonzero()[0]
+free_dofs = (fixity == 0).nonzero()
+fixed_dofs = (fixity == 1).nonzero()
 
 # Set forcing term
 f.fill(0.0)
-# for i_node in range(num_nodes):
-#     f[i_node, :] = [0.0,0.0,0.0]
 
 # Calculate lumped mass vector
 cell_domain_size = np.prod(cell_size[:dim])
 mass_factor = (rho*cell_domain_size) / (4.0 if dim == 2 else 8.0)
-lumped_mass_vector = np.zeros((num_nodes * dim))
+lumped_mass_vector = np.zeros((num_nodes, dim))
 def AssembleMass(cell, destination):
-    rows = cell.copy() * dim
-    for d in range(dim):
-        destination[rows] += mass_factor
-        rows[:] += 1
+    destination[cell, :] += mass_factor
 np.apply_along_axis(AssembleMass, 0, cells, lumped_mass_vector)
 
 # Calculate inverse of the lumped mass vector
 lumped_mass_vector_inv = 1.0 / lumped_mass_vector
 lumped_mass_vector_inv_bcs = lumped_mass_vector_inv.copy()
-lumped_mass_vector_inv_bcs[fix_rows] = 0.0
+lumped_mass_vector_inv_bcs[fixed_dofs] = 0.0
 
-cell_gradient_operator = element.GetCellGradientOperator(cell_size[0], cell_size[1], cell_size[2]) #TODO: To be removed (avoid assembly)
-gradient_operator = np.zeros((num_nodes * dim, num_cells))
-for i_cell in range(cells.shape[0]):
-    cell = cells[i_cell]
-    i_node = 0
-    for node in cell:
-        for d in range(dim):
-            gradient_operator[node*dim + d, i_cell] = cell_gradient_operator[i_node*dim + d]
-        i_node += 1
+# Matrix-free version (without assembly) of the gradient operator application onto a pressure vector
+def ApplyGradientOperator(x):
+    sol = np.zeros((num_nodes,dim))
+    cell_gradient_operator = element.GetCellGradientOperator(cell_size[0], cell_size[1], cell_size[2])
+    for i_cell in range(num_cells):
+        i_node = 0
+        for node in cells[i_cell]:
+            # for d in range(dim):
+            #     sol[node*dim + d] += cell_gradient_operator[i_node*dim + d] * x[i_cell]
+            sol[node, :] += cell_gradient_operator[i_node, :] * x[i_cell]
+            i_node += 1
+    return sol
+
+# Matrix-free version (without assembly) of the divergence operator application onto a velocity vector
+def ApplyDivergenceOperator(x):
+    sol = np.zeros(num_cells)
+    cell_gradient_operator = element.GetCellGradientOperator(cell_size[0], cell_size[1], cell_size[2])
+    for i_cell in range(num_cells):
+        sol[i_cell] = np.trace(cell_gradient_operator.transpose() @ x[cells[i_cell], :])
+    return sol
 
 # Matrix-free version of the pressure problem
-def ApplyPressureOperator(x, lumped_mass_vector_inv, gradient_operator):
-    sol = gradient_operator @ x
+def ApplyPressureOperator(x, lumped_mass_vector_inv):
+    sol = ApplyGradientOperator(x)
     sol *= lumped_mass_vector_inv
-    sol = gradient_operator.transpose() @ sol
+    sol = ApplyDivergenceOperator(sol)
     return sol
 
 # Create the preconditioner for the pressure CG solver
@@ -193,7 +200,7 @@ def ApplyPressureOperator(x, lumped_mass_vector_inv, gradient_operator):
 x = np.zeros((num_cells))
 c_row = int(box_divisions[0] * (box_divisions[1] / 2) + box_divisions[0] / 2) # We take the cell in the center of the domain
 x[c_row] = 1.0
-y = ApplyPressureOperator(x, lumped_mass_vector_inv, gradient_operator)
+y = ApplyPressureOperator(x, lumped_mass_vector_inv)
 
 fft_x = np.fft.fft(x)
 fft_y = np.fft.fft(y)
@@ -209,7 +216,8 @@ precond = scipy.sparse.linalg.LinearOperator((num_cells, num_cells), matvec=appl
 # Set the pressure operator
 # Note that the velocity fixity needs to be considered in the lumped mass operator in here
 def prod(x):
-    return ApplyPressureOperator(x, lumped_mass_vector_inv_bcs, gradient_operator)
+    y = ApplyPressureOperator(x, lumped_mass_vector_inv_bcs)
+    return y.flat
 
 pressure_op = scipy.sparse.linalg.LinearOperator((num_cells,num_cells), matvec=prod)
 
@@ -226,22 +234,21 @@ while current_time < end_time:
 
     # Calculate intermediate residuals
     rk_num_steps = rk_C.shape[0]
-    rk_res = np.zeros((num_nodes*dim, rk_num_steps))
+    rk_res = [np.zeros((num_nodes,dim)) for _ in range(rk_num_steps)]
     for rk_step in range(rk_num_steps):
         # Calculate current step velocity for residual calculation
         rk_theta = rk_C[rk_step]
         rk_step_time = current_time + rk_theta * dt
 
-        rk_v = np.zeros(num_nodes*dim)
+        rk_v = np.zeros((num_nodes, dim))
         for i_step in range(rk_step):
             a_ij = rk_A[rk_step, i_step]
-            rk_v += a_ij * rk_res[:, i_step]
+            rk_v += a_ij * rk_res[i_step]
         rk_v *= dt*lumped_mass_vector_inv
-        rk_v += v_n[:,0:dim].flat
-        rk_v[fix_rows] = rk_theta * v.flat[fix_rows] + (1.0 - rk_theta) * v_n.flat[fix_rows] # Set BC value in fixed DOFs
+        rk_v += v_n
+        rk_v[fixed_dofs] = rk_theta * v[fixed_dofs] + (1.0 - rk_theta) * v_n[fixed_dofs] # Set BC value in fixed DOFs
 
         # Calculate current step residual
-        rk_v = rk_v.reshape(num_nodes, dim)
         for i_cell in range(num_cells):
             # Get current cell data
             cell_p = p[i_cell]
@@ -263,29 +270,20 @@ while current_time < end_time:
             aux_i = 0
             for id_node in cells[i_cell]:
                 for d in range(dim):
-                    rk_res[id_node * dim + d, rk_step] += cell_res[aux_i * dim + d]
+                    rk_res[rk_step][id_node, d] += cell_res[aux_i * dim + d]
                 aux_i += 1
 
     # Solve Runge-Kutta step
-    for i in range(num_nodes):
-        for d in range(dim):
-            aux_i = i * dim + d
-            if fixity[aux_i] == 0:
-                v[i, d] = 0.0
-                for rk_step in range(rk_num_steps):
-                    v[i, d] += rk_B[rk_step] * rk_res[aux_i, rk_step]
-                v[i, d] *= dt / lumped_mass_vector[aux_i]
-                v[i, d] += v_n[i, d]
-
+    v[free_dofs] = 0.0
+    for rk_step in range(rk_num_steps):
+        v[free_dofs] += rk_B[rk_step] * rk_res[rk_step][free_dofs]
+    v[free_dofs] *= dt * lumped_mass_vector_inv[free_dofs]
+    v[free_dofs] += v_n[free_dofs]
     print("Velocity prediction solved.")
 
     # Solve pressure update
-    delta_p_rhs = np.zeros((num_cells))
-    for i in range(num_cells):
-        for j in range(num_nodes):
-            for d in range(dim):
-                delta_p_rhs[i] -= gradient_operator[j*dim + d, i] * v[j, d]
-    delta_p_rhs /= dt
+    delta_p_rhs = ApplyDivergenceOperator(v)
+    delta_p_rhs /= -dt
 
     p_iters = 0
     def nonlocal_iterate(arr):
@@ -297,12 +295,7 @@ while current_time < end_time:
     print(f"Pressure iterations: {p_iters}.")
 
     # Correct velocity
-    for i in range(num_nodes):
-        for d in range(dim):
-            aux_i = i * dim + d
-            if fixity[aux_i] == 0:
-                for j in range(num_cells):
-                    v[i, d] += dt * gradient_operator[aux_i,j] * delta_p[j] / lumped_mass_vector[aux_i]
+    v[free_dofs] += dt * lumped_mass_vector_inv[free_dofs] * ApplyGradientOperator(delta_p)[free_dofs]
     print("Velocity update finished.\n")
 
     # print(f"v: ", v)
@@ -314,19 +307,19 @@ while current_time < end_time:
     output_model_part.ProcessInfo[KratosMultiphysics.TIME] = current_time
     aux_id = 1
     for i_node in range(num_nodes):
-        output_model_part.GetNode(aux_id).SetValue(KratosMultiphysics.NODAL_AREA, lumped_mass_vector[i_node*dim])
+        output_model_part.GetNode(aux_id).SetValue(KratosMultiphysics.NODAL_AREA, lumped_mass_vector[i_node,0])
         aux_id += 1
 
-    KratosMultiphysics.VariableUtils().SetValuesVector(output_model_part.Nodes, KratosMultiphysics.VELOCITY_X, v[:,0])
-    KratosMultiphysics.VariableUtils().SetValuesVector(output_model_part.Nodes, KratosMultiphysics.VELOCITY_Y, v[:,1])
-    KratosMultiphysics.VariableUtils().SetValuesVector(output_model_part.Nodes, KratosMultiphysics.ACCELERATION_X, acc[:,0])
-    KratosMultiphysics.VariableUtils().SetValuesVector(output_model_part.Nodes, KratosMultiphysics.ACCELERATION_Y, acc[:,1])
-    KratosMultiphysics.VariableUtils().SetValuesVector(output_model_part.Nodes, KratosMultiphysics.VOLUME_ACCELERATION_X, f[:,0])
-    KratosMultiphysics.VariableUtils().SetValuesVector(output_model_part.Nodes, KratosMultiphysics.VOLUME_ACCELERATION_Y, f[:,1])
+    KratosMultiphysics.VariableUtils().SetValuesVector(output_model_part.Nodes, KratosMultiphysics.VELOCITY_X, list(v[:,0]))
+    KratosMultiphysics.VariableUtils().SetValuesVector(output_model_part.Nodes, KratosMultiphysics.VELOCITY_Y, list(v[:,1]))
+    KratosMultiphysics.VariableUtils().SetValuesVector(output_model_part.Nodes, KratosMultiphysics.ACCELERATION_X, list(acc[:,0]))
+    KratosMultiphysics.VariableUtils().SetValuesVector(output_model_part.Nodes, KratosMultiphysics.ACCELERATION_Y, list(acc[:,1]))
+    KratosMultiphysics.VariableUtils().SetValuesVector(output_model_part.Nodes, KratosMultiphysics.VOLUME_ACCELERATION_X, list(f[:,0]))
+    KratosMultiphysics.VariableUtils().SetValuesVector(output_model_part.Nodes, KratosMultiphysics.VOLUME_ACCELERATION_Y, list(f[:,1]))
     if dim == 3:
-        KratosMultiphysics.VariableUtils().SetValuesVector(output_model_part.Nodes, KratosMultiphysics.VELOCITY_Z, v[:,2])
-        KratosMultiphysics.VariableUtils().SetValuesVector(output_model_part.Nodes, KratosMultiphysics.ACCELERATION_Z, acc[:,2])
-        KratosMultiphysics.VariableUtils().SetValuesVector(output_model_part.Nodes, KratosMultiphysics.VOLUME_ACCELERATION_Z, f[:,2])
+        KratosMultiphysics.VariableUtils().SetValuesVector(output_model_part.Nodes, KratosMultiphysics.VELOCITY_Z, list(v[:,2]))
+        KratosMultiphysics.VariableUtils().SetValuesVector(output_model_part.Nodes, KratosMultiphysics.ACCELERATION_Z, list(acc[:,2]))
+        KratosMultiphysics.VariableUtils().SetValuesVector(output_model_part.Nodes, KratosMultiphysics.VOLUME_ACCELERATION_Z, list(f[:,2]))
 
     gid_output.ExecuteInitializeSolutionStep()
     gid_output.PrintOutput()
