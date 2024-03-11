@@ -8,12 +8,7 @@ import KratosMultiphysics
 from KratosMultiphysics.gid_output_process import GiDOutputProcess
 
 def CalculateDeltaTime(rho, mu, cell_size, velocities, target_cfl, target_fourier):
-    max_v = 0.0
-    for v in velocities:
-        norm_v = np.linalg.norm(v)
-        if norm_v > max_v:
-            max_v = norm_v
-
+    max_v = np.max(np.linalg.norm(velocities, axis=1))
     tol = 1.0e-12
     if max_v < tol:
         max_v = tol
@@ -119,18 +114,14 @@ gid_output.ExecuteBeforeSolutionLoop()
 
 # Create mesh dataset
 p = np.zeros((num_cells))
-f = np.zeros((num_nodes, 3))
-v = np.zeros((num_nodes, 3))
-v_n = np.zeros((num_nodes, 3))
-acc = np.zeros((num_nodes, 3))
+f = np.zeros((num_nodes, dim))
+v = np.zeros((num_nodes, dim))
+v_n = np.zeros((num_nodes, dim))
+acc = np.zeros((num_nodes, dim))
 
 # Set initial conditions
-for i_node in range(num_nodes):
-    v[i_node, :] = [0.0,0.0,0.0]
-    v_n[i_node, :] = [0.0,0.0,0.0]
-    #y_coord = nodes[i_node][1]
-    #v[i_node, :] = [4.0*y_coord*(1.0-y_coord),0.0,0.0]
-    #v_n[i_node, :] = [4.0*y_coord*(1.0-y_coord),0.0,0.0]
+v.fill(0.0)
+v_n.fill(0.0)
 
 # Set velocity fixity vector (0: free ; 1: fixed) and BCs
 # Note that these overwrite the initial conditions above
@@ -142,30 +133,37 @@ for i_node in range(num_nodes):
     if node[0] < tol: # Inlet
         fixity[i_node*dim] = 1 # x-velocity
         fixity[i_node*dim + 1] = 1 # y-velocity
-        # v[i_node, :] = [1.0,0.0,0.0]
-        # v_n[i_node, :] = [1.0,0.0,0.0]
+        # v[i_node, 0] = 1.0
+        # v_n[i_node, 0] = 1.0
         y_coord = nodes[i_node][1]
-        v[i_node, :] = [4.0*y_coord*(1.0-y_coord),0.0,0.0]
-        v_n[i_node, :] = [4.0*y_coord*(1.0-y_coord),0.0,0.0]
+        v[i_node, 0] = 4.0*y_coord*(1.0-y_coord)
+        v_n[i_node, 0] = 4.0*y_coord*(1.0-y_coord)
     if ((node[1] < tol) or (node[1] > (1.0-tol))): # Top and bottom walls
         fixity[i_node*dim + 1] = 1 # y-velocity
 
 # Set forcing term
-for i_node in range(num_nodes):
-    f[i_node, :] = [0.0,0.0,0.0]
+f.fill(0.0)
+# for i_node in range(num_nodes):
+#     f[i_node, :] = [0.0,0.0,0.0]
 
-# Calculate auxiliary operators
+# Calculate lumped mass vector
 cell_domain_size = np.prod(cell_size[:dim])
 mass_factor = (rho*cell_domain_size) / (4.0 if dim == 2 else 8.0)
 lumped_mass_vector = np.zeros((num_nodes * dim))
-for cell in cells:
-    for node in cell:
-        for d in range(dim):
-            lumped_mass_vector[node*dim + d] += mass_factor
-lumped_mass_vector_inv = [1.0 / lumped_mass for lumped_mass in lumped_mass_vector]
-lumped_mass_vector_inv_bcs = [1.0 / lumped_mass_vector[i] if fixity[i] == 0 else 0.0 for i in range(lumped_mass_vector.shape[0])]
+def AssembleMass(cell, destination):
+    rows = cell.copy() * dim
+    for d in range(dim):
+        destination[rows] += mass_factor
+        rows[:] += 1
+np.apply_along_axis(AssembleMass, 0, cells, lumped_mass_vector)
 
-cell_gradient_operator = element.GetCellGradientOperator(cell_size[0], cell_size[1], cell_size[2])
+# Calculate inverse of the lumped mass vector
+lumped_mass_vector_inv = 1.0 / lumped_mass_vector
+lumped_mass_vector_inv_bcs = lumped_mass_vector_inv.copy()
+fix_rows = (fixity == 1).nonzero()[0]
+lumped_mass_vector_inv_bcs[fix_rows] = 0.0
+
+cell_gradient_operator = element.GetCellGradientOperator(cell_size[0], cell_size[1], cell_size[2]) #TODO: To be removed (avoid assembly)
 gradient_operator = np.zeros((num_nodes * dim, num_cells))
 for i_cell in range(cells.shape[0]):
     cell = cells[i_cell]
@@ -323,9 +321,20 @@ while current_time < end_time:
     output_model_part.ProcessInfo[KratosMultiphysics.TIME] = current_time
     aux_id = 1
     for i_node in range(num_nodes):
-        output_model_part.GetNode(aux_id).SetValue(KratosMultiphysics.VELOCITY, v[i_node, :])
-        output_model_part.GetNode(aux_id).SetValue(KratosMultiphysics.ACCELERATION, acc[i_node, :])
-        output_model_part.GetNode(aux_id).SetValue(KratosMultiphysics.VOLUME_ACCELERATION, f[i_node, :])
+        v_out = KratosMultiphysics.Vector(3)
+        f_out = KratosMultiphysics.Vector(3)
+        acc_out = KratosMultiphysics.Vector(3)
+        for d in range(dim):
+            v_out[d] = v[i_node, d]
+            f_out[d] = f[i_node, d]
+            acc_out[d] = acc[i_node, d]
+        if dim == 2:
+            v_out[2] = 0.0
+            f_out[2] = 0.0
+            acc_out[2] = 0.0
+        output_model_part.GetNode(aux_id).SetValue(KratosMultiphysics.VELOCITY, v_out)
+        output_model_part.GetNode(aux_id).SetValue(KratosMultiphysics.ACCELERATION, acc_out)
+        output_model_part.GetNode(aux_id).SetValue(KratosMultiphysics.VOLUME_ACCELERATION, f_out)
         output_model_part.GetNode(aux_id).SetValue(KratosMultiphysics.NODAL_AREA, lumped_mass_vector[i_node*dim])
         aux_id += 1
 
