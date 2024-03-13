@@ -273,6 +273,22 @@ def ApplyPressureOperator(x, lumped_mass_vector_inv):
     sol = ApplyDivergenceOperator(sol)
     return sol
 
+# Returns the id of first cell for which all the velocity DOFs are free
+def FindFirstFreeCellId():
+    if dim == 2:
+        for i in range(box_divisions[0]):
+            for j in range(box_divisions[1]):
+                cell_node_ids = GetCellNodesGlobalIds(i, j, None)
+                if not fixity[cell_node_ids, :].any():
+                    return GetCellGlobalId(i, j, None)
+    else:
+        for i in range(box_divisions[0]):
+            for j in range(box_divisions[1]):
+                for k in range(box_divisions[2]):
+                    cell_node_ids = GetCellNodesGlobalIds(i, j, k)
+                    if not fixity[cell_node_ids, :].any():
+                        return GetCellGlobalId(i, j, k)
+
 # Create the preconditioner for the pressure CG solver
 # For this we convert the periodic pressure matrix C (with no velocity BCs) to FFT
 # The simplest way is to generate any vector x, compute the image vector y=C*X
@@ -283,8 +299,7 @@ def ApplyPressureOperator(x, lumped_mass_vector_inv):
 # But we can replace this null coefficient by anything different from 0.
 # At most it would degrade the convergence of the PCG, but we will see that the convergence is OK.
 x = np.zeros((num_cells))
-c_row = int(box_divisions[0] * (box_divisions[1] / 2) + box_divisions[0] / 2) # We take the cell in the center of the domain
-x[c_row] = 1.0
+x[FindFirstFreeCellId()] = 1.0
 y = ApplyPressureOperator(x, lumped_mass_vector_inv)
 
 fft_x = np.fft.fft(x)
