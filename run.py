@@ -7,6 +7,7 @@ import incompressible_navier_stokes_q1_p0_structured_element_2d as element
 
 import KratosMultiphysics
 from KratosMultiphysics.gid_output_process import GiDOutputProcess
+from KratosMultiphysics.vtu_output_process import VtuOutputProcess
 
 def CalculateDeltaTime(rho, mu, cell_size, velocities, target_cfl, target_fourier):
     max_v = np.max(np.linalg.norm(velocities, axis=1))
@@ -164,6 +165,29 @@ gid_output =  GiDOutputProcess(
 gid_output.ExecuteInitialize()
 gid_output.ExecuteBeforeSolutionLoop()
 
+vtu_output = VtuOutputProcess(
+    model,
+    KratosMultiphysics.Parameters("""{
+        "model_part_name"                   : "OutputModelPart",
+        "file_format"                       : "binary",
+        "output_precision"                  : 7,
+        "output_control_type"               : "step",
+        "output_interval"                   : 1.0,
+        "output_sub_model_parts"            : false,
+        "output_path"                       : "vtu_output",
+        "save_output_files_in_folder"       : true,
+        "write_deformed_configuration"      : false,
+        "nodal_solution_step_data_variables": [],
+        "nodal_data_value_variables"        : ["VELOCITY","ACCELERATION","NODAL_AREA"],
+        "nodal_flags"                       : [],
+        "element_data_value_variables"      : ["PRESSURE"],
+        "element_flags"                     : [],
+        "condition_data_value_variables"    : [],
+        "condition_flags"                   : []
+    }"""))
+vtu_output.ExecuteInitialize()
+vtu_output.ExecuteBeforeSolutionLoop()
+
 # Create mesh dataset
 p = np.zeros((num_cells))
 f = np.zeros((num_nodes, dim))
@@ -200,9 +224,20 @@ for i_node in range(num_nodes):
     if np.linalg.norm(node - cyl_orig) < cyl_rad:
         fixity[i_node, :] = 1 # fix velocity inside the cylinder
 
-
 free_dofs = (fixity == 0).nonzero()
 fixed_dofs = (fixity == 1).nonzero()
+
+if dim == 2:
+    active_cells = np.empty((box_divisions[0],box_divisions[1]), dtype=bool)
+    for i in range(box_divisions[0]):
+        for j in range(box_divisions[1]):
+            cell_node_ids = GetCellNodesGlobalIds(i, j, None)
+            if fixity[cell_node_ids, :].all():
+                active_cells[i, j] = False
+            else:
+                active_cells[i, j] = True
+else:
+    raise NotImplementedError
 
 # Set forcing term
 f.fill(0.0)
@@ -214,17 +249,24 @@ lumped_mass_vector = np.zeros((num_nodes, dim))
 if dim == 2:
     for i in range(box_divisions[0]):
         for j in range(box_divisions[1]):
-            cell_node_ids = GetCellNodesGlobalIds(i, j, None)
-            lumped_mass_vector[cell_node_ids, :] += mass_factor
+            if active_cells[i, j]:
+                cell_node_ids = GetCellNodesGlobalIds(i, j, None)
+                lumped_mass_vector[cell_node_ids, :] += mass_factor
 else:
     for i in range(box_divisions[0]):
         for j in range(box_divisions[1]):
             for k in range(box_divisions[2]):
+                #FIXME: We should consider the active_cells in here
                 cell_node_ids = GetCellNodesGlobalIds(i, j, k)
                 lumped_mass_vector[cell_node_ids, :] += mass_factor
 
 # Calculate inverse of the lumped mass vector
-lumped_mass_vector_inv = 1.0 / lumped_mass_vector
+lumped_mass_vector_inv = np.empty(lumped_mass_vector.shape)
+for i in range(lumped_mass_vector.shape[0]):
+    if lumped_mass_vector[i, 0] > 0.0:
+        lumped_mass_vector_inv[i, :] = 1.0 / lumped_mass_vector[i]
+    else:
+        lumped_mass_vector_inv[i, :] = 0.0
 lumped_mass_vector_inv_bcs = lumped_mass_vector_inv.copy()
 lumped_mass_vector_inv_bcs[fixed_dofs] = 0.0
 
@@ -236,16 +278,18 @@ def ApplyGradientOperator(x):
     if dim == 2:
         for i in range(box_divisions[0]):
             for j in range(box_divisions[1]):
-                cell_id = GetCellGlobalId(i, j, None)
-                cell_node_ids = GetCellNodesGlobalIds(i, j, None)
-                i_node = 0
-                for node_id in cell_node_ids:
-                    sol[node_id, :] += cell_gradient_operator[i_node, :] * x[cell_id]
-                    i_node += 1
+                if active_cells[i, j]:
+                    cell_id = GetCellGlobalId(i, j, None)
+                    cell_node_ids = GetCellNodesGlobalIds(i, j, None)
+                    i_node = 0
+                    for node_id in cell_node_ids:
+                        sol[node_id, :] += cell_gradient_operator[i_node, :] * x[cell_id]
+                        i_node += 1
     else:
         for i in range(box_divisions[0]):
             for j in range(box_divisions[1]):
                 for k in range(box_divisions[2]):
+                    #FIXME: We should consider the active_cells in here
                     cell_id = GetCellGlobalId(i, j, k)
                     cell_node_ids = GetCellNodesGlobalIds(i, j, k)
                     i_node = 0
@@ -263,13 +307,15 @@ def ApplyDivergenceOperator(x):
     if dim == 2:
         for i in range(box_divisions[0]):
             for j in range(box_divisions[1]):
-                cell_id = GetCellGlobalId(i, j, None)
-                cell_node_ids = GetCellNodesGlobalIds(i, j, None)
-                sol[cell_id] = np.trace(cell_gradient_operator.transpose() @ x[cell_node_ids, :])
+                if active_cells[i, j]:
+                    cell_id = GetCellGlobalId(i, j, None)
+                    cell_node_ids = GetCellNodesGlobalIds(i, j, None)
+                    sol[cell_id] = np.trace(cell_gradient_operator.transpose() @ x[cell_node_ids, :])
     else:
         for i in range(box_divisions[0]):
             for j in range(box_divisions[1]):
                 for k in range(box_divisions[2]):
+                    #FIXME: We should consider the active_cells in here
                     cell_id = GetCellGlobalId(i, j, k)
                     cell_node_ids = GetCellNodesGlobalIds(i, j, k)
                     sol[cell_id] = np.trace(cell_gradient_operator.transpose() @ x[cell_node_ids, :])
@@ -362,30 +408,31 @@ while current_time < end_time:
         if dim == 2:
             for i in range(box_divisions[0]):
                 for j in range(box_divisions[1]):
-                    # Get current cell data
-                    i_cell = GetCellGlobalId(i, j, None)
-                    i_cell_nodes = GetCellNodesGlobalIds(i, j, None)
-                    cell_p = p[i_cell]
-                    cell_v = np.empty((4 if dim == 2 else 8, dim))
-                    cell_f = np.empty((4 if dim == 2 else 8, dim))
-                    cell_acc = np.empty((4 if dim == 2 else 8, dim))
-                    aux_i = 0
-                    for id_node in i_cell_nodes:
-                        # for d in range(dim):
-                        cell_f[aux_i, :] = f[id_node, :]
-                        cell_acc[aux_i, :] = acc[id_node, :]
-                        cell_v[aux_i, :] = rk_v[id_node, :]
-                        aux_i += 1
+                    if active_cells[i, j]:
+                        # Get current cell data
+                        i_cell = GetCellGlobalId(i, j, None)
+                        i_cell_nodes = GetCellNodesGlobalIds(i, j, None)
+                        cell_p = p[i_cell]
+                        cell_v = np.empty((4 if dim == 2 else 8, dim))
+                        cell_f = np.empty((4 if dim == 2 else 8, dim))
+                        cell_acc = np.empty((4 if dim == 2 else 8, dim))
+                        aux_i = 0
+                        for id_node in i_cell_nodes:
+                            # for d in range(dim):
+                            cell_f[aux_i, :] = f[id_node, :]
+                            cell_acc[aux_i, :] = acc[id_node, :]
+                            cell_v[aux_i, :] = rk_v[id_node, :]
+                            aux_i += 1
 
-                    # Calculate current cell residual
-                    cell_res = element.CalculateRightHandSide(cell_size[0], cell_size[1], cell_size[2], mu, rho, cell_v, cell_p, cell_f, cell_acc, cell_v)
+                        # Calculate current cell residual
+                        cell_res = element.CalculateRightHandSide(cell_size[0], cell_size[1], cell_size[2], mu, rho, cell_v, cell_p, cell_f, cell_acc, cell_v)
 
-                    # Assemble current cell residual
-                    aux_i = 0
-                    for id_node in i_cell_nodes:
-                        for d in range(dim):
-                            rk_res[rk_step][id_node, d] += cell_res[aux_i * dim + d]
-                        aux_i += 1
+                        # Assemble current cell residual
+                        aux_i = 0
+                        for id_node in i_cell_nodes:
+                            for d in range(dim):
+                                rk_res[rk_step][id_node, d] += cell_res[aux_i * dim + d]
+                            aux_i += 1
         else:
             raise NotImplementedError
 
@@ -405,7 +452,7 @@ while current_time < end_time:
     def nonlocal_iterate(arr):
         global p_iters
         p_iters += 1
-    delta_p, converged = scipy.sparse.linalg.cg(pressure_op, delta_p_rhs, tol=1.0e-12, callback=nonlocal_iterate, M=precond)
+    delta_p, converged = scipy.sparse.linalg.cg(pressure_op, delta_p_rhs, tol=1.0e-3, callback=nonlocal_iterate, M=precond)
     p += delta_p
     tot_p_iters += p_iters
     print(f"Pressure iterations: {p_iters}.")
@@ -437,9 +484,24 @@ while current_time < end_time:
         KratosMultiphysics.VariableUtils().SetValuesVector(output_model_part.Nodes, KratosMultiphysics.ACCELERATION_Z, list(acc[:,2]))
         KratosMultiphysics.VariableUtils().SetValuesVector(output_model_part.Nodes, KratosMultiphysics.VOLUME_ACCELERATION_Z, list(f[:,2]))
 
+    if dim == 2:
+        for i in range(box_divisions[0]):
+            for j in range(box_divisions[1]):
+                cell_id = GetCellGlobalId(i,j,None)
+                # Set pressure to zero in the non-active cells (note that it is non-zero because the precond changes it, without any affectation)
+                if not active_cells[i,j]:
+                    p[cell_id] = 0.0
+                output_model_part.Elements[int(cell_id + 1)].SetValue(KratosMultiphysics.PRESSURE, p[cell_id])
+    else:
+        raise NotImplementedError
+
     gid_output.ExecuteInitializeSolutionStep()
     gid_output.PrintOutput()
     gid_output.ExecuteFinalizeSolutionStep()
+
+    vtu_output.ExecuteInitializeSolutionStep()
+    vtu_output.PrintOutput()
+    vtu_output.ExecuteFinalizeSolutionStep()
 
     # Update variables for next time step
     acc = (v - v_n) / dt
@@ -449,6 +511,7 @@ while current_time < end_time:
 
 # Finalize results
 gid_output.ExecuteFinalize()
+vtu_output.ExecuteFinalize()
 
 # Print final data
 print(f"TOTAL PRESSURE ITERATIONS: {tot_p_iters}")
