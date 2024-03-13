@@ -2,6 +2,7 @@ import mesher
 import numpy as np
 import scipy
 import scipy.linalg
+import scipy.sparse.linalg
 import incompressible_navier_stokes_q1_p0_structured_element_2d as element
 
 import KratosMultiphysics
@@ -54,14 +55,52 @@ box_divisions = [10,10,None]
 cell_size = [i/j if i is not None else 0.0 for i, j in zip(box_size, box_divisions)]
 if box_size[2] == None:
     dim = 2
-    box_divisions[2] = 1
 else:
     dim = 3
 
 # Create mesh
-nodes, cells = mesher.CreateStructuredMesh(box_divisions, box_size, dim)
-num_nodes = nodes.shape[0]
-num_cells = cells.shape[0]
+# Note that we discard the conectivities as we build these on the fly
+nodes, _ = mesher.CreateStructuredMesh(box_divisions, box_size, dim)
+
+def CalculateMeshData(box_divisions):
+    if box_divisions[2] == None:
+        num_cells = box_divisions[0] * box_divisions[1]
+        num_nodes = (box_divisions[0] + 1) * (box_divisions[1] + 1)
+    else:
+        num_cells = box_divisions[0] * box_divisions[1] * box_divisions[2]
+        num_nodes = (box_divisions[0] + 1) * (box_divisions[1] + 1) * (box_divisions[2] + 1)
+
+    return num_nodes, num_cells
+
+def GetCellGlobalId(i, j, k):
+    cell_id = i + j * box_divisions[0]
+    if k is not None:
+        cell_id += k * box_divisions[1]
+
+    return int(cell_id)
+
+def GetNodeGlobalId(i, j, k):
+    global_id = i + j * (box_divisions[0] + 1)
+    if k is not None:
+        global_id += k * (box_divisions[1] + 1)
+
+    return int(global_id)
+
+def GetCellNodesGlobalIds(i, j, k):
+    cell_ids = np.empty(4, dtype=int) if k == None else np.empty(8, dtype=int)
+    cell_ids[0] = GetNodeGlobalId(i, j, k)
+    cell_ids[1] = GetNodeGlobalId(i + 1, j, k)
+    cell_ids[2] = GetNodeGlobalId(i + 1, j + 1, k)
+    cell_ids[3] = GetNodeGlobalId(i, j + 1, k)
+    if k is not None:
+        cell_ids[4] = GetNodeGlobalId(i, j, k + 1)
+        cell_ids[5] = GetNodeGlobalId(i + 1, j, k + 1)
+        cell_ids[6] = GetNodeGlobalId(i + 1, j + 1, k + 1)
+        cell_ids[7] = GetNodeGlobalId(i, j + 1, k + 1)
+
+    return cell_ids
+
+num_nodes, num_cells = CalculateMeshData(box_divisions)
 
 print("### MESH DATA ###")
 print(f"num_nodes: {num_nodes}")
@@ -72,14 +111,25 @@ print(f"cell_size: {cell_size}\n")
 model = KratosMultiphysics.Model()
 output_model_part = model.CreateModelPart("OutputModelPart")
 fake_properties = output_model_part.CreateNewProperties(0)
+
 aux_id = 0
 for node in nodes:
     aux_id += 1
     output_model_part.CreateNewNode(aux_id, node[0], node[1], 0.0)
-aux_id = 0
-for cell in cells:
-    aux_id += 1
-    output_model_part.CreateNewElement("Element2D4N", aux_id, [cell[0]+1, cell[1]+1, cell[2]+1, cell[3]+1], fake_properties)
+
+if dim ==  2:
+    for i in range(box_divisions[0]):
+        for j in range(box_divisions[1]):
+            cell_id = GetCellGlobalId(i, j, None) + 1 # Kratos ids need to start by 1
+            cell_node_ids = [node_id + 1 for node_id in GetCellNodesGlobalIds(i, j, None)] # Kratos ids need to start by 1
+            output_model_part.CreateNewElement("Element2D4N", cell_id, cell_node_ids, fake_properties)
+else:
+    for i in range(box_divisions[0]):
+        for j in range(box_divisions[1]):
+            for k in range(box_divisions[2]):
+                cell_id = GetCellGlobalId(i, j, k) + 1 # Kratos ids need to start by 1
+                cell_node_ids = [node_id + 1 for node_id in GetCellNodesGlobalIds(i, j, k)] # Kratos ids need to start by 1
+                output_model_part.CreateNewElement("Element3D8N", cell_id, cell_node_ids, fake_properties)
 
 output_file = "output_model_part"
 gid_output =  GiDOutputProcess(
@@ -151,9 +201,17 @@ f.fill(0.0)
 cell_domain_size = np.prod(cell_size[:dim])
 mass_factor = (rho*cell_domain_size) / (4.0 if dim == 2 else 8.0)
 lumped_mass_vector = np.zeros((num_nodes, dim))
-def AssembleMass(cell, destination):
-    destination[cell, :] += mass_factor
-np.apply_along_axis(AssembleMass, 0, cells, lumped_mass_vector)
+if dim == 2:
+    for i in range(box_divisions[0]):
+        for j in range(box_divisions[1]):
+            cell_node_ids = GetCellNodesGlobalIds(i, j, None)
+            lumped_mass_vector[cell_node_ids, :] += mass_factor
+else:
+    for i in range(box_divisions[0]):
+        for j in range(box_divisions[1]):
+            for k in range(box_divisions[2]):
+                cell_node_ids = GetCellNodesGlobalIds(i, j, k)
+                lumped_mass_vector[cell_node_ids, :] += mass_factor
 
 # Calculate inverse of the lumped mass vector
 lumped_mass_vector_inv = 1.0 / lumped_mass_vector
@@ -164,21 +222,48 @@ lumped_mass_vector_inv_bcs[fixed_dofs] = 0.0
 def ApplyGradientOperator(x):
     sol = np.zeros((num_nodes,dim))
     cell_gradient_operator = element.GetCellGradientOperator(cell_size[0], cell_size[1], cell_size[2])
-    for i_cell in range(num_cells):
-        i_node = 0
-        for node in cells[i_cell]:
-            # for d in range(dim):
-            #     sol[node*dim + d] += cell_gradient_operator[i_node*dim + d] * x[i_cell]
-            sol[node, :] += cell_gradient_operator[i_node, :] * x[i_cell]
-            i_node += 1
+
+    if dim == 2:
+        for i in range(box_divisions[0]):
+            for j in range(box_divisions[1]):
+                cell_id = GetCellGlobalId(i, j, None)
+                cell_node_ids = GetCellNodesGlobalIds(i, j, None)
+                i_node = 0
+                for node_id in cell_node_ids:
+                    sol[node_id, :] += cell_gradient_operator[i_node, :] * x[cell_id]
+                    i_node += 1
+    else:
+        for i in range(box_divisions[0]):
+            for j in range(box_divisions[1]):
+                for k in range(box_divisions[2]):
+                    cell_id = GetCellGlobalId(i, j, k)
+                    cell_node_ids = GetCellNodesGlobalIds(i, j, k)
+                    i_node = 0
+                    for node_id in cell_node_ids:
+                        sol[node_id, :] += cell_gradient_operator[i_node, :] * x[cell_id]
+                        i_node += 1
+
     return sol
 
 # Matrix-free version (without assembly) of the divergence operator application onto a velocity vector
 def ApplyDivergenceOperator(x):
     sol = np.zeros(num_cells)
     cell_gradient_operator = element.GetCellGradientOperator(cell_size[0], cell_size[1], cell_size[2])
-    for i_cell in range(num_cells):
-        sol[i_cell] = np.trace(cell_gradient_operator.transpose() @ x[cells[i_cell], :])
+
+    if dim == 2:
+        for i in range(box_divisions[0]):
+            for j in range(box_divisions[1]):
+                cell_id = GetCellGlobalId(i, j, None)
+                cell_node_ids = GetCellNodesGlobalIds(i, j, None)
+                sol[cell_id] = np.trace(cell_gradient_operator.transpose() @ x[cell_node_ids, :])
+    else:
+        for i in range(box_divisions[0]):
+            for j in range(box_divisions[1]):
+                for k in range(box_divisions[2]):
+                    cell_id = GetCellGlobalId(i, j, k)
+                    cell_node_ids = GetCellNodesGlobalIds(i, j, k)
+                    sol[cell_id] = np.trace(cell_gradient_operator.transpose() @ x[cell_node_ids, :])
+
     return sol
 
 # Matrix-free version of the pressure problem
@@ -249,29 +334,35 @@ while current_time < end_time:
         rk_v[fixed_dofs] = rk_theta * v[fixed_dofs] + (1.0 - rk_theta) * v_n[fixed_dofs] # Set BC value in fixed DOFs
 
         # Calculate current step residual
-        for i_cell in range(num_cells):
-            # Get current cell data
-            cell_p = p[i_cell]
-            cell_v = np.empty((4 if dim == 2 else 8, dim))
-            cell_f = np.empty((4 if dim == 2 else 8, dim))
-            cell_acc = np.empty((4 if dim == 2 else 8, dim))
-            aux_i = 0
-            for id_node in cells[i_cell]:
-                # for d in range(dim):
-                cell_f[aux_i, :] = f[id_node, :]
-                cell_acc[aux_i, :] = acc[id_node, :]
-                cell_v[aux_i, :] = rk_v[id_node, :]
-                aux_i += 1
+        if dim == 2:
+            for i in range(box_divisions[0]):
+                for j in range(box_divisions[1]):
+                    # Get current cell data
+                    i_cell = GetCellGlobalId(i, j, None)
+                    i_cell_nodes = GetCellNodesGlobalIds(i, j, None)
+                    cell_p = p[i_cell]
+                    cell_v = np.empty((4 if dim == 2 else 8, dim))
+                    cell_f = np.empty((4 if dim == 2 else 8, dim))
+                    cell_acc = np.empty((4 if dim == 2 else 8, dim))
+                    aux_i = 0
+                    for id_node in i_cell_nodes:
+                        # for d in range(dim):
+                        cell_f[aux_i, :] = f[id_node, :]
+                        cell_acc[aux_i, :] = acc[id_node, :]
+                        cell_v[aux_i, :] = rk_v[id_node, :]
+                        aux_i += 1
 
-            # Calculate current cell residual
-            cell_res = element.CalculateRightHandSide(cell_size[0], cell_size[1], cell_size[2], mu, rho, cell_v, cell_p, cell_f, cell_acc, cell_v)
+                    # Calculate current cell residual
+                    cell_res = element.CalculateRightHandSide(cell_size[0], cell_size[1], cell_size[2], mu, rho, cell_v, cell_p, cell_f, cell_acc, cell_v)
 
-            # Assemble current cell residual
-            aux_i = 0
-            for id_node in cells[i_cell]:
-                for d in range(dim):
-                    rk_res[rk_step][id_node, d] += cell_res[aux_i * dim + d]
-                aux_i += 1
+                    # Assemble current cell residual
+                    aux_i = 0
+                    for id_node in i_cell_nodes:
+                        for d in range(dim):
+                            rk_res[rk_step][id_node, d] += cell_res[aux_i * dim + d]
+                        aux_i += 1
+        else:
+            raise NotImplementedError
 
     # Solve Runge-Kutta step
     v[free_dofs] = 0.0
