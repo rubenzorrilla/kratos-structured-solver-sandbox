@@ -46,12 +46,14 @@ end_time = 1.0e1
 init_time = 0.0
 
 # Material data
-mu = 1.81e-5
-rho = 1.293e0
+# mu = 1.81e-5
+# rho = 1.293e0
+mu = 2.0e-3
+rho = 1.0e0
 
 # Mesh data
 box_size = [5.0,1.0,None]
-box_divisions = [10,10,None]
+box_divisions = [150,30,None]
 cell_size = [i/j if i is not None else 0.0 for i, j in zip(box_size, box_divisions)]
 if box_size[2] == None:
     dim = 2
@@ -186,10 +188,18 @@ for i_node in range(num_nodes):
         # v[i_node, 0] = 1.0
         # v_n[i_node, 0] = 1.0
         y_coord = nodes[i_node][1]
-        v[i_node, 0] = 4.0*y_coord*(1.0-y_coord)
-        v_n[i_node, 0] = 4.0*y_coord*(1.0-y_coord)
+        v[i_node, 0] = 6.0*y_coord*(1.0-y_coord)
+        v_n[i_node, 0] = 6.0*y_coord*(1.0-y_coord)
     if ((node[1] < tol) or (node[1] > (1.0-tol))): # Top and bottom walls
         fixity[i_node, 1] = 1 # y-velocity
+
+cyl_rad = 0.1
+cyl_orig = [1.25,0.5]
+for i_node in range(num_nodes):
+    node = nodes[i_node]
+    if np.linalg.norm(node - cyl_orig) < cyl_rad:
+        fixity[i_node, :] = 1 # fix velocity inside the cylinder
+
 
 free_dofs = (fixity == 0).nonzero()
 fixed_dofs = (fixity == 1).nonzero()
