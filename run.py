@@ -134,7 +134,7 @@ else:
                 cell_node_ids = [node_id + 1 for node_id in GetCellNodesGlobalIds(i, j, k)] # Kratos ids need to start by 1
                 output_model_part.CreateNewElement("Element3D8N", cell_id, cell_node_ids, fake_properties)
 
-output_file = "output_model_part"
+output_file = "gid_output/output_model_part"
 gid_output =  GiDOutputProcess(
     output_model_part,
     output_file,
@@ -155,7 +155,7 @@ gid_output =  GiDOutputProcess(
                 "skin_output": false,
                 "plane_output": [],
                 "nodal_results": [],
-                "nodal_nonhistorical_results": ["VELOCITY","ACCELERATION","VOLUME_ACCELERATION","NODAL_AREA"],
+                "nodal_nonhistorical_results": ["VELOCITY","ACCELERATION","VOLUME_ACCELERATION","NODAL_AREA","DISTANCE","YOUNG_MODULUS","DISPLACEMENT"],
                 "nodal_flags_results": [],
                 "gauss_point_results": [],
                 "additional_list_files": []
@@ -178,7 +178,7 @@ vtu_output = VtuOutputProcess(
         "save_output_files_in_folder"       : true,
         "write_deformed_configuration"      : false,
         "nodal_solution_step_data_variables": [],
-        "nodal_data_value_variables"        : ["VELOCITY","ACCELERATION","NODAL_AREA"],
+        "nodal_data_value_variables"        : ["VELOCITY","ACCELERATION","NODAL_AREA","DISTANCE","YOUNG_MODULUS","DISPLACEMENT"],
         "nodal_flags"                       : [],
         "element_data_value_variables"      : ["PRESSURE"],
         "element_flags"                     : [],
@@ -199,34 +199,89 @@ acc = np.zeros((num_nodes, dim))
 v.fill(0.0)
 v_n.fill(0.0)
 
-# Set velocity fixity vector (0: free ; 1: fixed) and BCs
+# Set velocity fixity vector and BCs
 # Note that these overwrite the initial conditions above
-fixity = np.zeros((num_nodes,dim), dtype=int)
+fixity = np.zeros((num_nodes,dim), dtype=bool)
 
 tol = 1.0e-6
 for i_node in range(num_nodes):
     node = nodes[i_node]
     if node[0] < tol: # Inlet
-        fixity[i_node, 0] = 1 # x-velocity
-        fixity[i_node, 1] = 1 # y-velocity
-        # v[i_node, 0] = 1.0
-        # v_n[i_node, 0] = 1.0
+        fixity[i_node, 0] = True # x-velocity
+        fixity[i_node, 1] = True # y-velocity
+        # v[i_node, 0] = True
+        # v_n[i_node, 0] = True
         y_coord = nodes[i_node][1]
         v[i_node, 0] = 6.0*y_coord*(1.0-y_coord)
         v_n[i_node, 0] = 6.0*y_coord*(1.0-y_coord)
     if ((node[1] < tol) or (node[1] > (1.0-tol))): # Top and bottom walls
-        fixity[i_node, 1] = 1 # y-velocity
+        fixity[i_node, 1] = True # y-velocity
 
+# Calculate the distance values
 cyl_rad = 0.1
 cyl_orig = [1.25,0.5]
+distance = np.empty(num_nodes)
 for i_node in range(num_nodes):
     node = nodes[i_node]
-    if np.linalg.norm(node - cyl_orig) < cyl_rad:
-        fixity[i_node, :] = 1 # fix velocity inside the cylinder
+    dist = np.linalg.norm(node - cyl_orig)
+    distance[i_node] = - dist if dist < cyl_rad else dist
 
-free_dofs = (fixity == 0).nonzero()
-fixed_dofs = (fixity == 1).nonzero()
+# Find the surrogate boundary
+surrogate_nodes = np.zeros(num_nodes, dtype=bool)
+if dim == 2:
+    for i in range(box_divisions[0]):
+        for j in range(box_divisions[1]):
+            cell_node_ids = GetCellNodesGlobalIds(i, j, None)
+            pos_nodes = []
+            neg_nodes = []
+            for node, dist  in zip(cell_node_ids, distance[cell_node_ids]):
+                if dist < 0.0:
+                    neg_nodes.append(node)
+                else:
+                    pos_nodes.append(node)
+            if len(pos_nodes) and len(neg_nodes):
+                surrogate_nodes[pos_nodes] = True
+else:
+    raise NotImplementedError
 
+surrogate_cells = np.zeros(num_cells, dtype=bool)
+if dim == 2:
+    for i in range(box_divisions[0]):
+        for j in range(box_divisions[1]):
+            cell_node_ids = GetCellNodesGlobalIds(i, j, None)
+            if not any(dist < 0.0 for dist in distance[cell_node_ids]):
+                for node in cell_node_ids:
+                    if surrogate_nodes[node]:
+                        surrogate_cells[GetCellGlobalId(i, j, None)] = True
+                        break
+else:
+    raise NotImplementedError
+
+# Calculate the distance vectors in the surrogate boundary nodes
+aux_i = 0
+distance_vects = np.zeros((num_nodes, dim))
+for sur_node in surrogate_nodes:
+    if sur_node:
+        aux_dir = cyl_orig - nodes[aux_i]
+        aux_dir /= np.linalg.norm(aux_dir)
+        distance_vects[aux_i,:] = distance[aux_i] * aux_dir
+    aux_i += 1
+
+# Apply fixity in the interior nodes
+aux_i = 0
+for dist in distance:
+    if dist < 0.0:
+        fixity[aux_i, :] = True
+    aux_i += 1
+
+# Apply fixity in the surrogate boundary nodes
+aux_i = 0
+for sur_node in surrogate_nodes:
+    if sur_node:
+        fixity[aux_i, :] = True
+    aux_i += 1
+
+# Deactivate the interior and intersected cells (SBM-like resolution)
 if dim == 2:
     active_cells = np.empty((box_divisions[0],box_divisions[1]), dtype=bool)
     for i in range(box_divisions[0]):
@@ -241,6 +296,10 @@ else:
 
 # Set forcing term
 f.fill(0.0)
+
+# Set final free/fixed DOFs arrays
+free_dofs = (fixity == False).nonzero()
+fixed_dofs = (fixity == True).nonzero()
 
 # Calculate lumped mass vector
 cell_domain_size = np.prod(cell_size[:dim])
@@ -329,6 +388,26 @@ def ApplyPressureOperator(x, lumped_mass_vector_inv):
     sol = ApplyDivergenceOperator(sol)
     return sol
 
+# Calculates the surrogate boundary Dirichlet values by assembling the gradient operator
+def UpdateSurrogateBoundaryDirichletValues():
+    v_surrogate = np.zeros((num_nodes, dim))
+    if dim == 2:
+        cell_gradient_operator = element.GetCellGradientOperator(cell_size[0], cell_size[1], cell_size[2])
+        for i in range(box_divisions[0]):
+            for j in range(box_divisions[1]):
+                if surrogate_cells[GetCellGlobalId(i, j, None)]:
+                    cell_node_ids = GetCellNodesGlobalIds(i, j, None)
+                    grad_v = cell_gradient_operator.transpose() @ v[cell_node_ids, :]
+                    for node in cell_node_ids:
+                        if surrogate_nodes[node]:
+                            dir_bc = mass_factor * grad_v @ distance_vects[node, :]
+                            dir_bc /= lumped_mass_vector[node, :]
+                            v_surrogate[node, :] -= dir_bc
+    else:
+        raise NotImplementedError
+
+    return v_surrogate
+
 # Returns the id of first cell for which all the velocity DOFs are free
 def FindFirstFreeCellId():
     if dim == 2:
@@ -387,6 +466,15 @@ while current_time < end_time:
     # Note that we use the current step velocity to be updated as it equals the previous one at this point
     dt = CalculateDeltaTime(rho, mu, cell_size, v, 0.2, 0.2)
     print(f"### Step {current_step} - time {current_time} - dt {dt} ###")
+
+    # Update the surrogate boundary Dirichlet value from the previous tiem step velocity gradient
+    aux_i = 0
+    v_surrogate = UpdateSurrogateBoundaryDirichletValues()
+    for i in range(num_nodes):
+        if surrogate_nodes[aux_i]:
+            v[aux_i] = v_surrogate[aux_i]
+            v_n[aux_i] = v_surrogate[aux_i]
+        aux_i += 1
 
     # Calculate intermediate residuals
     rk_num_steps = rk_C.shape[0]
@@ -468,17 +556,18 @@ while current_time < end_time:
     output_model_part.CloneTimeStep(current_time)
     output_model_part.ProcessInfo[KratosMultiphysics.STEP] = current_step
     output_model_part.ProcessInfo[KratosMultiphysics.TIME] = current_time
-    aux_id = 1
-    for i_node in range(num_nodes):
-        output_model_part.GetNode(aux_id).SetValue(KratosMultiphysics.NODAL_AREA, lumped_mass_vector[i_node,0])
-        aux_id += 1
 
+    KratosMultiphysics.VariableUtils().SetValuesVector(output_model_part.Nodes, KratosMultiphysics.DISTANCE, list(distance))
+    KratosMultiphysics.VariableUtils().SetValuesVector(output_model_part.Nodes, KratosMultiphysics.DISPLACEMENT_X, list(distance_vects[:,0]))
+    KratosMultiphysics.VariableUtils().SetValuesVector(output_model_part.Nodes, KratosMultiphysics.DISPLACEMENT_Y, list(distance_vects[:,1]))
     KratosMultiphysics.VariableUtils().SetValuesVector(output_model_part.Nodes, KratosMultiphysics.VELOCITY_X, list(v[:,0]))
     KratosMultiphysics.VariableUtils().SetValuesVector(output_model_part.Nodes, KratosMultiphysics.VELOCITY_Y, list(v[:,1]))
     KratosMultiphysics.VariableUtils().SetValuesVector(output_model_part.Nodes, KratosMultiphysics.ACCELERATION_X, list(acc[:,0]))
     KratosMultiphysics.VariableUtils().SetValuesVector(output_model_part.Nodes, KratosMultiphysics.ACCELERATION_Y, list(acc[:,1]))
     KratosMultiphysics.VariableUtils().SetValuesVector(output_model_part.Nodes, KratosMultiphysics.VOLUME_ACCELERATION_X, list(f[:,0]))
     KratosMultiphysics.VariableUtils().SetValuesVector(output_model_part.Nodes, KratosMultiphysics.VOLUME_ACCELERATION_Y, list(f[:,1]))
+    KratosMultiphysics.VariableUtils().SetValuesVector(output_model_part.Nodes, KratosMultiphysics.NODAL_AREA, list(lumped_mass_vector[:,0]))
+    KratosMultiphysics.VariableUtils().SetValuesVector(output_model_part.Nodes, KratosMultiphysics.YOUNG_MODULUS, [float(i) for i in surrogate_nodes])
     if dim == 3:
         KratosMultiphysics.VariableUtils().SetValuesVector(output_model_part.Nodes, KratosMultiphysics.VELOCITY_Z, list(v[:,2]))
         KratosMultiphysics.VariableUtils().SetValuesVector(output_model_part.Nodes, KratosMultiphysics.ACCELERATION_Z, list(acc[:,2]))
