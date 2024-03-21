@@ -158,9 +158,9 @@ int main()
     }
 
     // Deactivate the interior and intersected cells (SBM-like resolution)
+    Eigen::Array<bool, Eigen::Dynamic, 1> active_cells(num_cells);
     if constexpr (dim == 2) {
         std::array<int,4> cell_node_ids;
-        Eigen::Array<bool, Eigen::Dynamic, Eigen::Dynamic> active_cells(box_divisions[0], box_divisions[1]);
         for (unsigned int i = 0; i < box_divisions[0]; ++i) {
             for (unsigned int j = 0; j < box_divisions[1]; ++j) {
                 CellUtilities::GetCellNodesGlobalIds(i, j, box_divisions, cell_node_ids);
@@ -174,7 +174,7 @@ int main()
                         }
                     }
                 }
-                active_cells(i, j) = is_fixed;
+                active_cells(CellUtilities::GetCellGlobalId(i, j, box_divisions)) = is_fixed;
             }
         }
     } else {
@@ -184,7 +184,15 @@ int main()
     // Set forcing term
     f.setZero();
 
+    // Set final free/fixed DOFs arrays
+    auto free_dofs = fixity == false;
+    auto fixed_dofs = fixity == true;
 
+    // Calculate lumped mass vector
+    const double cell_domain_size = CellUtilities::GetCellDomainSize(cell_size);
+    const double mass_factor = rho * cell_domain_size / (dim == 2 ? 4.0 : 8.0);
+    Eigen::Array<double, Eigen::Dynamic, dim> lumped_mass_vector(num_nodes, dim);
+    MeshUtilities<dim>::CalculateLumpedMassVector(mass_factor, box_divisions, active_cells, lumped_mass_vector);
 
     return 0;
 }

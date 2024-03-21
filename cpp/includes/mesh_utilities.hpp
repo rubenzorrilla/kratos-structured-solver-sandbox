@@ -20,4 +20,10 @@ public:
         const std::array<double, TDim>& rBoxSize,
         const std::array<int, TDim>& rBoxDivisions,
         Eigen::Array<double, Eigen::Dynamic, Eigen::Dynamic>& rNodalCoords);
+
+    static void CalculateLumpedMassVector(
+        const double MassFactor,
+        const std::array<int, TDim>& rBoxDivisions,
+        const Eigen::Array<bool, Eigen::Dynamic, 1>& rActiveCells,
+        Eigen::Array<double, Eigen::Dynamic, TDim>& rLumpedMassVector);
 };

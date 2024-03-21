@@ -1,5 +1,6 @@
 #include <iostream>
 
+#include "cell_utilities.hpp"
 #include "mesh_utilities.hpp"
 
 template<int TDim>
@@ -94,6 +95,55 @@ void MeshUtilities<TDim>::CalculateNodalCoordinates(
         }
     }
 }
+
+template<>
+void MeshUtilities<2>::CalculateLumpedMassVector(
+    const double MassFactor,
+    const std::array<int, 2>& rBoxDivisions,
+    const Eigen::Array<bool, Eigen::Dynamic, 1>& rActiveCells,
+    Eigen::Array<double, Eigen::Dynamic, 2>& rLumpedMassVector)
+{
+    const unsigned int num_nodes = std::get<0>(CalculateMeshData(rBoxDivisions));
+    if (rLumpedMassVector.rows() != num_nodes) {
+        rLumpedMassVector.resize(num_nodes, 2);
+    }
+    rLumpedMassVector.setZero();
+    std::array<int, 4> cell_node_ids;
+    for (unsigned int i = 0; i < rBoxDivisions[0]; ++i) {
+        for (unsigned int j = 0; j < rBoxDivisions[1]; ++j) {
+            if (rActiveCells(CellUtilities::GetCellGlobalId(i, j, rBoxDivisions))) {
+                CellUtilities::GetCellNodesGlobalIds(i, j, rBoxDivisions, cell_node_ids);
+                rLumpedMassVector(cell_node_ids, Eigen::all).array() += MassFactor;
+            }
+        }
+    }
+}
+
+template<>
+void MeshUtilities<3>::CalculateLumpedMassVector(
+    const double MassFactor,
+    const std::array<int, 3>& rBoxDivisions,
+    const Eigen::Array<bool, Eigen::Dynamic, 1>& rActiveCells,
+    Eigen::Array<double, Eigen::Dynamic, 3>& rLumpedMassVector)
+{
+    const unsigned int num_nodes = std::get<0>(CalculateMeshData(rBoxDivisions));
+    if (rLumpedMassVector.rows() != num_nodes) {
+        rLumpedMassVector.resize(num_nodes, 3);
+    }
+    rLumpedMassVector.setZero();
+    std::array<int, 8> cell_node_ids;
+    for (unsigned int i = 0; i < rBoxDivisions[0]; ++i) {
+        for (unsigned int j = 0; j < rBoxDivisions[1]; ++j) {
+            for (unsigned int k = 0; k < rBoxDivisions[2]; ++k) {
+                if (rActiveCells(CellUtilities::GetCellGlobalId(i, j, k, rBoxDivisions))) {
+                    CellUtilities::GetCellNodesGlobalIds(i, j, k, rBoxDivisions, cell_node_ids);
+                    rLumpedMassVector(cell_node_ids, Eigen::all).array() += MassFactor;
+                }
+            }
+        }
+    }
+}
+
 
 template class MeshUtilities<2>;
 template class MeshUtilities<3>;

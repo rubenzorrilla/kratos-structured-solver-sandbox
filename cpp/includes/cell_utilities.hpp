@@ -55,4 +55,14 @@ public:
         const unsigned int K,
         const std::array<int, 3>& rBoxDivisions,
         std::array<int, 8>& rCellIds);
+
+    static double GetCellDomainSize(const std::array<double, 2>& rCellSize)
+    {
+        return rCellSize[0]*rCellSize[1];
+    }
+
+    static double GetCellDomainSize(const std::array<double, 3>& rCellSize)
+    {
+        return rCellSize[0]*rCellSize[1]*rCellSize[2];
+    }
 };
