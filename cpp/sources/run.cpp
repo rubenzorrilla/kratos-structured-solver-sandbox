@@ -48,7 +48,7 @@ int main()
 
     // Set velocity fixity vector and BCs
     // Note that these overwrite the initial conditions above
-    Eigen::Array<bool, Eigen::Dynamic, Eigen::Dynamic> fixity(num_nodes, dim);
+    Eigen::Array<bool, Eigen::Dynamic, dim> fixity(num_nodes, dim);
     fixity.setZero();
 
     const double tol = 1.0e-6;
@@ -185,14 +185,40 @@ int main()
     f.setZero();
 
     // Set final free/fixed DOFs arrays
-    auto free_dofs = fixity == false;
-    auto fixed_dofs = fixity == true;
+    // TODO: Check if there is a more efficient way to do this
+    std::vector<unsigned int> free_dofs_rows;
+    std::vector<unsigned int> free_dofs_cols;
+    std::vector<unsigned int> fixed_dofs_rows;
+    std::vector<unsigned int> fixed_dofs_cols;
+    for (unsigned int i_row = 0; i_row < fixity.rows(); ++i_row) {
+        for (unsigned int j_col = 0; j_col < fixity.cols(); ++j_col) {
+            if (fixity(i_row, j_col)) {
+                fixed_dofs_rows.push_back(i_row);
+                fixed_dofs_cols.push_back(j_col);
+            } else {
+                free_dofs_rows.push_back(i_row);
+                free_dofs_cols.push_back(j_col);
+            }
+        }
+    }
 
     // Calculate lumped mass vector
     const double cell_domain_size = CellUtilities::GetCellDomainSize(cell_size);
     const double mass_factor = rho * cell_domain_size / (dim == 2 ? 4.0 : 8.0);
     Eigen::Array<double, Eigen::Dynamic, dim> lumped_mass_vector(num_nodes, dim);
     MeshUtilities<dim>::CalculateLumpedMassVector(mass_factor, box_divisions, active_cells, lumped_mass_vector);
+
+    // Calculate inverse of the lumped mass vector
+    Eigen::Array<double, Eigen::Dynamic, dim> lumped_mass_vector_inv(num_nodes, dim);
+    for (unsigned int i_node = 0; i_node < num_nodes; ++i_node) {
+        if (lumped_mass_vector(i_node, 0) > 0.0) {
+            lumped_mass_vector_inv(i_node, Eigen::all) = 1.0 / lumped_mass_vector(i_node, 0);
+        } else {
+            lumped_mass_vector_inv(i_node, Eigen::all) = 0.0;
+        }
+    }
+    Eigen::Array<double, Eigen::Dynamic, dim> lumped_mass_vector_inv_bcs = lumped_mass_vector_inv;
+    lumped_mass_vector_inv_bcs(fixed_dofs_rows, fixed_dofs_cols) = 0.0;
 
     return 0;
 }
