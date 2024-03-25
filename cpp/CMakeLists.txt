@@ -35,6 +35,8 @@ include_directories("external_libraries/eigen-3.4.0") # Header files directories
 file (GLOB_RECURSE KRATOS_STRUCTURED_SOLVER_SANDBOX_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/sources/cell_utilities.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/sources/mesh_utilities.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/sources/runge_kutta_utilities.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/sources/time_utilities.cpp
 ) # Source files directories
 
 add_library(KratosStructuredSolverSandboxLibrary SHARED ${KRATOS_STRUCTURED_SOLVER_SANDBOX_SOURCES}) # This creates the library (we need to specify all the sources)

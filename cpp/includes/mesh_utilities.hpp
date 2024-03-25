@@ -26,4 +26,8 @@ public:
         const std::array<int, TDim>& rBoxDivisions,
         const Eigen::Array<bool, Eigen::Dynamic, 1>& rActiveCells,
         Eigen::Array<double, Eigen::Dynamic, TDim>& rLumpedMassVector);
+
+    static unsigned int FindFirstFreeCellId(
+        const std::array<int, TDim> &rBoxDivisions,
+        const Eigen::Array<bool, Eigen::Dynamic, TDim>& rFixity);
 };

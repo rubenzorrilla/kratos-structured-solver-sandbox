@@ -4,6 +4,8 @@
 
 #include "cell_utilities.hpp"
 #include "mesh_utilities.hpp"
+#include "runge_kutta_utilities.hpp"
+#include "time_utilities.hpp"
 
 int main()
 {
@@ -165,16 +167,7 @@ int main()
             for (unsigned int j = 0; j < box_divisions[1]; ++j) {
                 CellUtilities::GetCellNodesGlobalIds(i, j, box_divisions, cell_node_ids);
                 const auto cell_fixity = fixity(cell_node_ids, Eigen::all);
-                bool is_fixed = true;
-                for (unsigned int i_fix = 0; i_fix < cell_fixity.rows(); ++i_fix) {
-                    for (unsigned int j_fix = 0; j_fix < cell_fixity.cols(); ++j_fix) {
-                        if (!cell_fixity(i_fix, j_fix)) {
-                            is_fixed = false;
-                            break;
-                        }
-                    }
-                }
-                active_cells(CellUtilities::GetCellGlobalId(i, j, box_divisions)) = is_fixed;
+                active_cells(CellUtilities::GetCellGlobalId(i, j, box_divisions)) = cell_fixity.all();
             }
         }
     } else {
@@ -219,6 +212,32 @@ int main()
     }
     Eigen::Array<double, Eigen::Dynamic, dim> lumped_mass_vector_inv_bcs = lumped_mass_vector_inv;
     lumped_mass_vector_inv_bcs(fixed_dofs_rows, fixed_dofs_cols) = 0.0;
+
+    // Set Runge-Kutta arrays
+    constexpr int rk_order = 4;
+    Eigen::Array<double, rk_order, 1> rk_B;
+    Eigen::Array<double, rk_order, 1> rk_C;
+    Eigen::Array<double, rk_order, rk_order> rk_A;
+    RungeKuttaUtilities<rk_order>::SetNodesVector(rk_C);
+    RungeKuttaUtilities<rk_order>::SetWeightsVector(rk_B);
+    RungeKuttaUtilities<rk_order>::SetRungeKuttaMatrix(rk_A);
+
+    // Time loop
+    unsigned int tot_p_iters = 0;
+    unsigned int current_step = 1;
+    unsigned int current_time = init_time;
+    while (current_time < end_time) {
+        // Compute time increment with CFL and Fourier conditions
+        // Note that we use the current step velocity to be updated as it equals the previous one at this point
+        const double dt = TimeUtilities<dim>::CalculateDeltaTime(rho, mu, cell_size, v, 0.2, 0.2);
+        std::cout << "### Step " << current_step << " - time " << current_time << " - dt " << dt << " ###" << std::endl;
+
+        // Update variables for next time step
+        acc = (v - v_n) / dt;
+        v_n = v;
+        ++current_step;
+        current_time += dt;
+    }
 
     return 0;
 }

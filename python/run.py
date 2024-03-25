@@ -467,7 +467,7 @@ while current_time < end_time:
     dt = CalculateDeltaTime(rho, mu, cell_size, v, 0.2, 0.2)
     print(f"### Step {current_step} - time {current_time} - dt {dt} ###")
 
-    # Update the surrogate boundary Dirichlet value from the previous tiem step velocity gradient
+    # Update the surrogate boundary Dirichlet value from the previous time step velocity gradient
     aux_i = 0
     v_surrogate = UpdateSurrogateBoundaryDirichletValues()
     for i in range(num_nodes):
