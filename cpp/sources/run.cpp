@@ -222,6 +222,14 @@ int main()
     RungeKuttaUtilities<rk_order>::SetWeightsVector(rk_B);
     RungeKuttaUtilities<rk_order>::SetRungeKuttaMatrix(rk_A);
 
+    // Allocate auxiliary arrays
+    constexpr int rk_num_steps = rk_order;
+    Eigen::Array<double, Eigen::Dynamic, dim> rk_v(num_nodes, dim);
+    std::array<Eigen::Array<double, Eigen::Dynamic, dim>, rk_num_steps> rk_res;
+    for (auto& r_arr : rk_res) {
+        r_arr.resize(num_nodes, dim);
+    }
+
     // Time loop
     unsigned int tot_p_iters = 0;
     unsigned int current_step = 1;
@@ -231,6 +239,31 @@ int main()
         // Note that we use the current step velocity to be updated as it equals the previous one at this point
         const double dt = TimeUtilities<dim>::CalculateDeltaTime(rho, mu, cell_size, v, 0.2, 0.2);
         std::cout << "### Step " << current_step << " - time " << current_time << " - dt " << dt << " ###" << std::endl;
+
+        // Update the surrogate boundary Dirichlet value from the previous time step velocity gradient
+        //TODO:
+
+        // Calculate intermediate residuals
+        for (unsigned int rk_step = 0; rk_step < rk_num_steps; ++rk_step) {
+            // Initialize current intermediate step residual
+            auto& r_rk_step_res = rk_res[rk_step];
+            r_rk_step_res.setZero();
+
+            // Calculate current step velocity for residual calculation
+            const double rk_theta = rk_C[rk_step];
+            const double rk_step_time = current_time + rk_theta * dt;
+            rk_v.setZero();
+            for (unsigned int i_step = 0; i_step < rk_step; ++i_step) {
+                const double a_ij = rk_A(rk_step, i_step);
+                rk_v += a_ij * rk_res[i_step];
+            }
+            rk_v *= dt * lumped_mass_vector_inv;
+            rk_v += v_n;
+            rk_v(fixed_dofs_rows, fixed_dofs_cols) = rk_theta * v(fixed_dofs_rows, fixed_dofs_cols) + (1.0 - rk_theta) * v_n(fixed_dofs_rows, fixed_dofs_cols); // Set BC value in fixed DOFs
+
+            // Calculate current step residual
+            //TODO:
+        }
 
         // Update variables for next time step
         acc = (v - v_n) / dt;
