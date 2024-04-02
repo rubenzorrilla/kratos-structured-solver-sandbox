@@ -21,7 +21,8 @@ int main()
 
     // Input mesh data
     const std::array<double, dim> box_size({5.0, 1.0});
-    const std::array<int, dim> box_divisions({150, 30});
+    // const std::array<int, dim> box_divisions({150, 30});
+    const std::array<int, dim> box_divisions({4, 1});
 
     // Compute mesh data
     auto mesh_data = MeshUtilities<dim>::CalculateMeshData(box_divisions);
@@ -62,8 +63,10 @@ int main()
             fixity(i_node, 0) = true; // x-velocity
             fixity(i_node, 1) = true; // y-velocity
             const double y_coord = r_coords(1);
-            v(i_node, 0) = 6.0*y_coord*(1.0-y_coord);
-            v_n(i_node, 0) = 6.0*y_coord*(1.0-y_coord);
+            // v(i_node, 0) = 6.0*y_coord*(1.0-y_coord);
+            // v_n(i_node, 0) = 6.0*y_coord*(1.0-y_coord);
+            v(i_node, 0) = 1.0;
+            v_n(i_node, 0) = 1.0;
         }
 
         // Top and bottom wals
@@ -82,7 +85,8 @@ int main()
     for (unsigned int i_node = 0; i_node < num_nodes; ++i_node) {
         const auto& r_coords = nodal_coords.row(i_node);
         const double dist = (r_coords - cyl_orig).matrix().norm();
-        distance(i_node) = dist < cyl_rad ? - dist : dist;
+        // distance(i_node) = dist < cyl_rad ? - dist : dist;
+        distance(i_node) = 1.0;
     }
 
     // Find the surrogate boundary
@@ -168,7 +172,7 @@ int main()
             for (unsigned int j = 0; j < box_divisions[1]; ++j) {
                 CellUtilities::GetCellNodesGlobalIds(i, j, box_divisions, cell_node_ids);
                 const auto cell_fixity = fixity(cell_node_ids, Eigen::all);
-                active_cells(CellUtilities::GetCellGlobalId(i, j, box_divisions)) = cell_fixity.all();
+                active_cells(CellUtilities::GetCellGlobalId(i, j, box_divisions)) = !cell_fixity.all();
             }
         }
     } else {
@@ -282,6 +286,12 @@ int main()
 
                             // Calculate current cell residual
                             IncompressibleNavierStokesQ1P0StructuredElement::CalculateRightHandSide(cell_size[0], cell_size[1], mu, rho, cell_v, cell_p, cell_f, cell_acc, cell_res);
+                            if (i_cell == 1) {
+                                std::cout << "i_cell: " << i_cell << std::endl;
+                                std::cout << cell_v << std::endl;
+                                std::cout << cell_p << std::endl;
+                                std::cout << cell_res << std::endl;
+                            }
 
                             // Assemble current cell residual
                             unsigned int aux_i = 0;
@@ -313,7 +323,14 @@ int main()
         v_n = v;
         ++current_step;
         current_time += dt;
+
+        if (current_step == 2) {
+            break;
+        }
     }
+
+    std::cout << "v: \n" <<  v << std::endl;
+    std::cout << "p: \n" << p << std::endl;
 
     return 0;
 }

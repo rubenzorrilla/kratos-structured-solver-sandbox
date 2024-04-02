@@ -54,7 +54,8 @@ rho = 1.0e0
 
 # Mesh data
 box_size = [5.0,1.0,None]
-box_divisions = [150,30,None]
+box_divisions = [4,1,None]
+# box_divisions = [150,30,None]
 cell_size = [i/j if i is not None else 0.0 for i, j in zip(box_size, box_divisions)]
 if box_size[2] == None:
     dim = 2
@@ -212,8 +213,10 @@ for i_node in range(num_nodes):
         # v[i_node, 0] = True
         # v_n[i_node, 0] = True
         y_coord = nodes[i_node][1]
-        v[i_node, 0] = 6.0*y_coord*(1.0-y_coord)
-        v_n[i_node, 0] = 6.0*y_coord*(1.0-y_coord)
+        v[i_node, 0] = 1.0
+        v_n[i_node, 0] = 1.0
+        # v[i_node, 0] = 6.0*y_coord*(1.0-y_coord)
+        # v_n[i_node, 0] = 6.0*y_coord*(1.0-y_coord)
     if ((node[1] < tol) or (node[1] > (1.0-tol))): # Top and bottom walls
         fixity[i_node, 1] = True # y-velocity
 
@@ -224,7 +227,8 @@ distance = np.empty(num_nodes)
 for i_node in range(num_nodes):
     node = nodes[i_node]
     dist = np.linalg.norm(node - cyl_orig)
-    distance[i_node] = - dist if dist < cyl_rad else dist
+    distance[i_node] = 1.0
+    # distance[i_node] = - dist if dist < cyl_rad else dist
 
 # Find the surrogate boundary
 surrogate_nodes = np.zeros(num_nodes, dtype=bool)
@@ -514,6 +518,11 @@ while current_time < end_time:
 
                         # Calculate current cell residual
                         cell_res = element.CalculateRightHandSide(cell_size[0], cell_size[1], cell_size[2], mu, rho, cell_v, cell_p, cell_f, cell_acc)
+                        if i_cell == 1:
+                            print(f"i_cell: {i_cell}")
+                            print(cell_v)
+                            print(cell_p)
+                            print(cell_res)
 
                         # Assemble current cell residual
                         aux_i = 0
@@ -532,22 +541,22 @@ while current_time < end_time:
     v[free_dofs] += v_n[free_dofs]
     print("Velocity prediction solved.")
 
-    # Solve pressure update
-    delta_p_rhs = ApplyDivergenceOperator(v)
-    delta_p_rhs /= -dt
+    # # Solve pressure update
+    # delta_p_rhs = ApplyDivergenceOperator(v)
+    # delta_p_rhs /= -dt
 
-    p_iters = 0
-    def nonlocal_iterate(arr):
-        global p_iters
-        p_iters += 1
-    delta_p, converged = scipy.sparse.linalg.cg(pressure_op, delta_p_rhs, tol=1.0e-3, callback=nonlocal_iterate, M=precond)
-    p += delta_p
-    tot_p_iters += p_iters
-    print(f"Pressure iterations: {p_iters}.")
+    # p_iters = 0
+    # def nonlocal_iterate(arr):
+    #     global p_iters
+    #     p_iters += 1
+    # delta_p, converged = scipy.sparse.linalg.cg(pressure_op, delta_p_rhs, tol=1.0e-3, callback=nonlocal_iterate, M=precond)
+    # p += delta_p
+    # tot_p_iters += p_iters
+    # print(f"Pressure iterations: {p_iters}.")
 
-    # Correct velocity
-    v[free_dofs] += dt * lumped_mass_vector_inv[free_dofs] * ApplyGradientOperator(delta_p)[free_dofs]
-    print("Velocity update finished.\n")
+    # # Correct velocity
+    # v[free_dofs] += dt * lumped_mass_vector_inv[free_dofs] * ApplyGradientOperator(delta_p)[free_dofs]
+    # print("Velocity update finished.\n")
 
     # print(f"v: ", v)
     # print(f"p: ", p)
@@ -598,9 +607,15 @@ while current_time < end_time:
     current_step += 1
     current_time += dt
 
+    if current_step == 2:
+        break
+
 # Finalize results
 gid_output.ExecuteFinalize()
 vtu_output.ExecuteFinalize()
+
+print("v: \n", v)
+print("p: \n", p)
 
 # Print final data
 print(f"TOTAL PRESSURE ITERATIONS: {tot_p_iters}")

@@ -97,7 +97,7 @@ def ImportKinematicsModule(dim):
         raise NotImplementedError
 
 dim = 2
-output_type = "python"
+output_type = "c"
 do_simplify = False
 kinematics_module = ImportKinematicsModule(dim)
 
