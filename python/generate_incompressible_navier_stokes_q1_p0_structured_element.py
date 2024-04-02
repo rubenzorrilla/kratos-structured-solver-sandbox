@@ -10,26 +10,26 @@ def GetOutstringPython(dim):
         outstring = "import math\n"
         outstring += "import numpy\n"
         outstring += "\n"
-        outstring += "def CalculateRightHandSide(a, b, c, mu, rho, v, p, f, acc, v_conv):\n"
+        outstring += "def CalculateRightHandSide(a, b, c, mu, rho, v, p, f, acc):\n"
         outstring += f"    RHS = numpy.empty(8)\n"
         outstring += "#substitute_rhs_2d"
         outstring += "\n    return RHS"
         outstring += "\n\n"
         outstring += "def GetCellGradientOperator(a, b, c):\n"
-        outstring += f"    G = numpy.empty(4,2)\n"
+        outstring += f"    G = numpy.empty((4,2))\n"
         outstring += "#substitute_G_2d"
         outstring += "\n    return G"
     elif dim == 3:
         outstring = "import math\n"
         outstring += "import numpy\n"
         outstring += "\n"
-        outstring += "def CalculateRightHandSide(a, b, c, mu, rho, v, p, f, acc, v_conv):\n"
+        outstring += "def CalculateRightHandSide(a, b, c, mu, rho, v, p, f, acc):\n"
         outstring += f"    RHS = numpy.empty(24)\n"
         outstring += "#substitute_rhs_3d"
         outstring += "\n    return RHS"
         outstring += "\n\n"
         outstring += "def GetCellGradientOperator(a, b, c):\n"
-        outstring += f"    G = numpy.empty(8,3)\n"
+        outstring += f"    G = numpy.empty((8,3))\n"
         outstring += "#substitute_G_3d"
         outstring += "\n    return G"
     else:
@@ -97,7 +97,7 @@ def ImportKinematicsModule(dim):
         raise NotImplementedError
 
 dim = 2
-output_type = "c"
+output_type = "python"
 do_simplify = False
 kinematics_module = ImportKinematicsModule(dim)
 
@@ -123,7 +123,6 @@ p = sympy.Symbol('p') # Pressure value
 f = KratosSympy.DefineMatrix('f', num_nodes, dim) # Body force
 v = KratosSympy.DefineMatrix('v', num_nodes, dim) # Nodal velocities
 acc = KratosSympy.DefineMatrix('acc', num_nodes, dim) # Nodal acceleration (previous step)
-v_conv = KratosSympy.DefineMatrix('v_conv', num_nodes, dim) # Linearised convective velocity
 
 # Test functions
 w = KratosSympy.DefineMatrix('w', num_nodes, dim) # Test function nodal values
@@ -150,33 +149,32 @@ for g in range(len(quadrature)):
 
     # Define Gauss point interpolations
     f_g = N * f
+    v_g = N * v
     w_g = N * w
     acc_g = N * acc
-    v_conv_g = N *v_conv
 
     grad_v_g = DN_DX.transpose() * v
     grad_w_g = DN_DX.transpose() * w
-    grad_v_conv_g = DN_DX.transpose() * v_conv
 
     div_w_g = sum([grad_w_g[d,d] for d in range(dim)])
-    div_v_conv_g = sum([grad_v_conv_g[d,d] for d in range(dim)])
+    div_v_g = sum([grad_v_g[d,d] for d in range(dim)])
 
     # Calculate current Gauss point stabilization constant
     # Note that the element size (h) is computed at each Gauss point
     h = sympy.sqrt(weight) if dim == 2 else sympy.cbrt(weight)
-    v_conv_g_norm = sympy.sqrt(sum(v**2 for v in v_conv_g))
-    tau = 1.0/(stab_c1*mu/h**2 + stab_c2*rho*v_conv_g_norm/h)
+    v_g_norm = sympy.sqrt(sum(v**2 for v in v_g))
+    tau = 1.0/(stab_c1*mu/h**2 + stab_c2*rho*v_g_norm/h)
 
     # Calculate Gauss point functional terms
     pres_term = div_w_g*p
     forcing_term = (rho*w_g*f_g.transpose())[0,0]
-    conv_term = (rho*w_g*(v_conv_g @ grad_v_g).transpose())[0,0]
+    conv_term = (rho*w_g*(v_g @ grad_v_g).transpose())[0,0]
     visc_term = mu*KratosSympy.DoubleContraction(grad_w_g, grad_v_g)
 
     # Define velocity subscale
     v_subs_forcing_term = rho*f_g.transpose()
     v_subs_inertial_term = rho*acc_g.transpose()
-    v_subs_conv_term = rho*(v_conv_g @ grad_v_g).transpose()
+    v_subs_conv_term = rho*(v_g @ grad_v_g).transpose()
     v_subs_visc_term = sympy.Matrix(2, 1, lambda i, j : 0.0)
     for i in range(num_nodes):
         DDN_DDX_i = DDN_DDX[i,:,:]
@@ -184,8 +182,8 @@ for g in range(len(quadrature)):
     v_subs = tau * (v_subs_forcing_term - v_subs_inertial_term - v_subs_conv_term + v_subs_visc_term)
 
     # Calculate Gauss point stabilization functional terms
-    stab_conv_term_1 = (rho * div_v_conv_g * w_g * v_subs)[0,0]
-    stab_conv_term_2 = (rho * v_conv_g @ grad_w_g * v_subs)[0,0]
+    stab_conv_term_1 = (rho * div_v_g * w_g * v_subs)[0,0]
+    stab_conv_term_2 = (rho * v_g @ grad_w_g * v_subs)[0,0]
 
     # Add and differentiate the functional
     phi = forcing_term - conv_term - visc_term + pres_term

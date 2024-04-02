@@ -513,7 +513,7 @@ while current_time < end_time:
                             aux_i += 1
 
                         # Calculate current cell residual
-                        cell_res = element.CalculateRightHandSide(cell_size[0], cell_size[1], cell_size[2], mu, rho, cell_v, cell_p, cell_f, cell_acc, cell_v)
+                        cell_res = element.CalculateRightHandSide(cell_size[0], cell_size[1], cell_size[2], mu, rho, cell_v, cell_p, cell_f, cell_acc)
 
                         # Assemble current cell residual
                         aux_i = 0
