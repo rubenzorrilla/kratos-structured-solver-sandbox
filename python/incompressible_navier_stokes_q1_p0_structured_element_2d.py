@@ -278,20 +278,7 @@ def CalculateRightHandSide(a, b, c, mu, rho, v, p, f, acc, v_conv):
     return RHS
 
 def GetCellGradientOperator(a, b, c):
-    # G = numpy.empty(8)
-    # cG0 = 0.5*b
-    # cG1 = -cG0
-    # cG2 = 0.5*a
-    # cG3 = -cG2
-    # G[0] = cG1
-    # G[1] = cG3
-    # G[2] = cG0
-    # G[3] = cG3
-    # G[4] = cG0
-    # G[5] = cG2
-    # G[6] = cG1
-    # G[7] = cG2
-    G = numpy.empty((4,2))
+    G = numpy.empty(4,2)
     cG0 = 0.5*b
     cG1 = -cG0
     cG2 = 0.5*a

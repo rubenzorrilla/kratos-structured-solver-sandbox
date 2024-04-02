@@ -3,6 +3,7 @@
 #include <Eigen/Dense>
 
 #include "cell_utilities.hpp"
+#include "incompressible_navier_stokes_q1_p0_structured_element.hpp"
 #include "mesh_utilities.hpp"
 #include "runge_kutta_utilities.hpp"
 #include "time_utilities.hpp"
@@ -42,7 +43,7 @@ int main()
     MeshUtilities<dim>::CalculateNodalCoordinates(box_size, box_divisions, nodal_coords);
 
     // Create mesh dataset
-    Eigen::ArrayXXd p = Eigen::VectorXd::Zero(num_nodes);
+    Eigen::ArrayXXd p = Eigen::VectorXd::Zero(num_cells);
     Eigen::ArrayXXd f = Eigen::MatrixXd::Zero(num_nodes, dim);
     Eigen::ArrayXXd v = Eigen::MatrixXd::Zero(num_nodes, dim);
     Eigen::ArrayXXd v_n = Eigen::MatrixXd::Zero(num_nodes, dim);
@@ -233,7 +234,7 @@ int main()
     // Time loop
     unsigned int tot_p_iters = 0;
     unsigned int current_step = 1;
-    unsigned int current_time = init_time;
+    double current_time = init_time;
     while (current_time < end_time) {
         // Compute time increment with CFL and Fourier conditions
         // Note that we use the current step velocity to be updated as it equals the previous one at this point
@@ -262,8 +263,50 @@ int main()
             rk_v(fixed_dofs_rows, fixed_dofs_cols) = rk_theta * v(fixed_dofs_rows, fixed_dofs_cols) + (1.0 - rk_theta) * v_n(fixed_dofs_rows, fixed_dofs_cols); // Set BC value in fixed DOFs
 
             // Calculate current step residual
-            //TODO:
+            if constexpr (dim == 2) {
+                std::array<int,4> cell_node_ids;
+                Eigen::Array<double, 4, 2> cell_v;
+                Eigen::Array<double, 4, 2> cell_f;
+                Eigen::Array<double, 4, 2> cell_acc;
+                Eigen::Array<double, 8, 1> cell_res;
+                for (unsigned int i = 0; i < box_divisions[0]; ++i) {
+                    for (unsigned int j = 0; j < box_divisions[1]; ++j) {
+                        const unsigned int i_cell = CellUtilities::GetCellGlobalId(i, j, box_divisions);
+                        if (active_cells(i_cell)) {
+                            // Get current cell data
+                            CellUtilities::GetCellNodesGlobalIds(i, j, box_divisions, cell_node_ids);
+                            const double cell_p = p(i_cell);
+                            cell_v = v(cell_node_ids, Eigen::all);
+                            cell_f = f(cell_node_ids, Eigen::all);
+                            cell_acc = acc(cell_node_ids, Eigen::all);
+
+                            // Calculate current cell residual
+                            IncompressibleNavierStokesQ1P0StructuredElement::CalculateRightHandSide(cell_size[0], cell_size[1], mu, rho, cell_v, cell_p, cell_f, cell_acc, cell_res);
+
+                            // Assemble current cell residual
+                            unsigned int aux_i = 0;
+                            for (const int id_node : cell_node_ids) {
+                                for (unsigned int d = 0; d < 2; ++d) {
+                                    rk_res[rk_step](id_node, d) += cell_res(2 * aux_i + d);
+                                }
+                                aux_i++;
+                            }
+                        }
+                    }
+                }
+            } else {
+                throw std::logic_error("3D case not implemented yet");
+            }
         }
+
+        // Solve Runge-Kutta step
+        v(free_dofs_rows, free_dofs_cols) = 0.0;
+        for (unsigned int rk_step = 0; rk_step < rk_num_steps; ++rk_step) {
+            v(free_dofs_rows, free_dofs_cols) += rk_B[rk_step] * rk_res[rk_step](free_dofs_rows, free_dofs_cols);
+        }
+        v(free_dofs_rows, free_dofs_cols) *= dt * lumped_mass_vector_inv(free_dofs_rows, free_dofs_cols);
+        v(free_dofs_rows, free_dofs_cols) += v_n(free_dofs_rows, free_dofs_cols);
+        std::cout << "Velocity prediction solved." << std::endl;
 
         // Update variables for next time step
         acc = (v - v_n) / dt;

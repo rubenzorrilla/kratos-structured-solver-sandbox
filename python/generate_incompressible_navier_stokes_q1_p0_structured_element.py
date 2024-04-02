@@ -5,7 +5,7 @@ import importlib
 import KratosMultiphysics
 import KratosMultiphysics.sympy_fe_utilities as KratosSympy
 
-def GetOutstring(dim):
+def GetOutstringPython(dim):
     if dim == 2:
         outstring = "import math\n"
         outstring += "import numpy\n"
@@ -16,7 +16,7 @@ def GetOutstring(dim):
         outstring += "\n    return RHS"
         outstring += "\n\n"
         outstring += "def GetCellGradientOperator(a, b, c):\n"
-        outstring += f"    G = numpy.empty(8)\n"
+        outstring += f"    G = numpy.empty(4,2)\n"
         outstring += "#substitute_G_2d"
         outstring += "\n    return G"
     elif dim == 3:
@@ -29,11 +29,62 @@ def GetOutstring(dim):
         outstring += "\n    return RHS"
         outstring += "\n\n"
         outstring += "def GetCellGradientOperator(a, b, c):\n"
-        outstring += f"    G = numpy.empty(24)\n"
+        outstring += f"    G = numpy.empty(8,3)\n"
         outstring += "#substitute_G_3d"
         outstring += "\n    return G"
     else:
         raise NotImplementedError
+
+    return outstring
+
+def GetOutstringC():
+    outstring = "#include \"incompressible_navier_stokes_q1_p0_structured_element.hpp\"\n"
+    outstring += "\n"
+    outstring += "void IncompressibleNavierStokesQ1P0StructuredElement::CalculateRightHandSide(\n"
+    outstring += "    const double a,\n"
+    outstring += "    const double b,\n"
+    outstring += "    const double mu,\n"
+    outstring += "    const double rho,\n"
+    outstring += "    const Eigen::Array<double, 4, 2>& v,\n"
+    outstring += "    const double p,\n"
+    outstring += "    const Eigen::Array<double, 4, 2>& f,\n"
+    outstring += "    const Eigen::Array<double, 4, 2>& acc,\n"
+    outstring += "    Eigen::Array<double, 8, 1>& RHS)\n"
+    outstring += "{\n"
+    outstring += "\n//substitute_rhs_2d\n"
+    outstring += "}\n"
+    outstring += "\n"
+    outstring += "void IncompressibleNavierStokesQ1P0StructuredElement::GetCellGradientOperator(\n"
+    outstring += "    const double a,\n"
+    outstring += "    const double b,\n"
+    outstring += "    Eigen::Array<double, 4, 2>& G)\n"
+    outstring += "{\n"
+    outstring += "\n//substitute_G_2d\n"
+    outstring += "}\n"
+    outstring += "\n"
+    outstring += "void IncompressibleNavierStokesQ1P0StructuredElement::CalculateRightHandSide(\n"
+    outstring += "    const double a,\n"
+    outstring += "    const double b,\n"
+    outstring += "    const double c,\n"
+    outstring += "    const double mu,\n"
+    outstring += "    const double rho,\n"
+    outstring += "    const Eigen::Array<double, 8, 3>& v,\n"
+    outstring += "    const double p,\n"
+    outstring += "    const Eigen::Array<double, 8, 3>& f,\n"
+    outstring += "    const Eigen::Array<double, 8, 3>& acc,\n"
+    outstring += "    Eigen::Array<double, 24, 1>& RHS)\n"
+    outstring += "{\n"
+    outstring += "\n//substitute_rhs_3d\n"
+    outstring += "}\n"
+    outstring += "\n"
+    outstring += "void IncompressibleNavierStokesQ1P0StructuredElement::GetCellGradientOperator(\n"
+    outstring += "    const double a,\n"
+    outstring += "    const double b,\n"
+    outstring += "    const double c,\n"
+    outstring += "    Eigen::Array<double, 8, 3>& G)\n"
+    outstring += "{\n"
+    outstring += "\n//substitute_G_3d\n"
+    outstring += "}\n"
 
     return outstring
 
@@ -46,6 +97,7 @@ def ImportKinematicsModule(dim):
         raise NotImplementedError
 
 dim = 2
+output_type = "c"
 do_simplify = False
 kinematics_module = ImportKinematicsModule(dim)
 
@@ -82,7 +134,7 @@ quadrature = kinematics_module.GetGaussQuadrature(integration_order)
 nodal_coords = kinematics_module.SetNodalCoordinates(x0, y0, z0, a, b, c)
 
 # Loop the Gauss points (note that this results in the complete elemental RHS contribution)
-G = sympy.Matrix(num_nodes*dim, 1, lambda i, j : 0.0)
+G = sympy.Matrix(num_nodes, dim, lambda i, j : 0.0)
 RHS = sympy.Matrix(num_nodes*dim, 1, lambda i, j : 0.0)
 for g in range(len(quadrature)):
     # Get current Gauss point data
@@ -149,15 +201,22 @@ for g in range(len(quadrature)):
     # Add gradient (and divergence) operator contribution
     for i in range(num_nodes):
         for d in range(dim):
-            G[i*dim + d, 0] += weight * DN_DX[i,d]
+            G[i,d] += weight * DN_DX[i,d]
 
-RHS_output = KratosSympy.OutputVector_CollectingFactors(RHS, "RHS", "python", indentation_level=1, replace_indices=True, assignment_op=" = ")
-G_output = KratosSympy.OutputVector_CollectingFactors(G, "G", "python", indentation_level=1, replace_indices=True, assignment_op=" = ")
-outstring = GetOutstring(dim)
-outstring = outstring.replace(f"#substitute_rhs_{dim}d", RHS_output)
-outstring = outstring.replace(f"#substitute_G_{dim}d", G_output)
+RHS_output = KratosSympy.OutputVector_CollectingFactors(RHS, "RHS", output_type, indentation_level=1, replace_indices=True, assignment_op=" = ")
+G_output = KratosSympy.OutputMatrix_CollectingFactors(G, "G", output_type, indentation_level=1, replace_indices=True, assignment_op=" = ")
 
-out = open(f"incompressible_navier_stokes_q1_p0_structured_element_{dim}d.py",'w')
+if output_type == "python":
+    outstring = GetOutstringPython(dim)
+    outstring = outstring.replace(f"#substitute_rhs_{dim}d", RHS_output)
+    outstring = outstring.replace(f"#substitute_G_{dim}d", G_output)
+    out = open(f"incompressible_navier_stokes_q1_p0_structured_element_{dim}d.py",'w')
+else:
+    outstring = GetOutstringC()
+    outstring = outstring.replace(f"//substitute_rhs_{dim}d", RHS_output)
+    outstring = outstring.replace(f"//substitute_G_{dim}d", G_output)
+    out = open(f"incompressible_navier_stokes_q1_p0_structured_element.cpp",'w')
+
 out.write(outstring)
 out.close()
 
