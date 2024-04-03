@@ -280,7 +280,7 @@ int main()
                             // Get current cell data
                             CellUtilities::GetCellNodesGlobalIds(i, j, box_divisions, cell_node_ids);
                             const double cell_p = p(i_cell);
-                            cell_v = v(cell_node_ids, Eigen::all);
+                            cell_v = rk_v(cell_node_ids, Eigen::all);
                             cell_f = f(cell_node_ids, Eigen::all);
                             cell_acc = acc(cell_node_ids, Eigen::all);
 
