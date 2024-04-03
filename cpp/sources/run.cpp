@@ -199,6 +199,8 @@ int main()
             }
         }
     }
+    const unsigned int n_free_dofs = free_dofs_cols.size();
+    const unsigned int n_fixed_dofs = fixed_dofs_cols.size();
 
     // Calculate lumped mass vector
     const double cell_domain_size = CellUtilities::GetCellDomainSize(cell_size);
@@ -216,7 +218,9 @@ int main()
         }
     }
     Eigen::Array<double, Eigen::Dynamic, dim> lumped_mass_vector_inv_bcs = lumped_mass_vector_inv;
-    lumped_mass_vector_inv_bcs(fixed_dofs_rows, fixed_dofs_cols) = 0.0;
+    for (unsigned int i_dof = 0; i_dof < n_fixed_dofs; ++i_dof) {
+        lumped_mass_vector_inv_bcs(fixed_dofs_rows[i_dof], fixed_dofs_cols[i_dof]) = 0.0;
+    }
 
     // Set Runge-Kutta arrays
     constexpr int rk_order = 4;
@@ -264,7 +268,11 @@ int main()
             }
             rk_v *= dt * lumped_mass_vector_inv;
             rk_v += v_n;
-            rk_v(fixed_dofs_rows, fixed_dofs_cols) = rk_theta * v(fixed_dofs_rows, fixed_dofs_cols) + (1.0 - rk_theta) * v_n(fixed_dofs_rows, fixed_dofs_cols); // Set BC value in fixed DOFs
+            for (unsigned int i_dof = 0; i_dof < n_fixed_dofs; ++i_dof) {
+                const unsigned int dof_row = fixed_dofs_rows[i_dof];
+                const unsigned int dof_col = fixed_dofs_cols[i_dof];
+                rk_v(dof_row, dof_col) = rk_theta * v(dof_row, dof_col) + (1.0 - rk_theta) * v_n(dof_row, dof_col); // Set BC value in fixed DOFs
+            }
 
             // Calculate current step residual
             if constexpr (dim == 2) {
@@ -286,12 +294,6 @@ int main()
 
                             // Calculate current cell residual
                             IncompressibleNavierStokesQ1P0StructuredElement::CalculateRightHandSide(cell_size[0], cell_size[1], mu, rho, cell_v, cell_p, cell_f, cell_acc, cell_res);
-                            if (i_cell == 1) {
-                                std::cout << "i_cell: " << i_cell << std::endl;
-                                std::cout << cell_v << std::endl;
-                                std::cout << cell_p << std::endl;
-                                std::cout << cell_res << std::endl;
-                            }
 
                             // Assemble current cell residual
                             unsigned int aux_i = 0;
@@ -310,12 +312,16 @@ int main()
         }
 
         // Solve Runge-Kutta step
-        v(free_dofs_rows, free_dofs_cols) = 0.0;
-        for (unsigned int rk_step = 0; rk_step < rk_num_steps; ++rk_step) {
-            v(free_dofs_rows, free_dofs_cols) += rk_B[rk_step] * rk_res[rk_step](free_dofs_rows, free_dofs_cols);
+        for (unsigned int i_dof = 0; i_dof < n_free_dofs; ++i_dof) {
+            const unsigned int dof_row = free_dofs_rows[i_dof];
+            const unsigned int dof_col = free_dofs_cols[i_dof];
+            v(dof_row, dof_col) = 0.0;
+            for (unsigned int rk_step = 0; rk_step < rk_num_steps; ++rk_step) {
+                v(dof_row, dof_col) += rk_B[rk_step] * rk_res[rk_step](dof_row, dof_col);
+            }
+            v(dof_row, dof_col) *= dt * lumped_mass_vector_inv(dof_row, dof_col);
+            v(dof_row, dof_col) += v_n(dof_row, dof_col);
         }
-        v(free_dofs_rows, free_dofs_cols) *= dt * lumped_mass_vector_inv(free_dofs_rows, free_dofs_cols);
-        v(free_dofs_rows, free_dofs_cols) += v_n(free_dofs_rows, free_dofs_cols);
         std::cout << "Velocity prediction solved." << std::endl;
 
         // Update variables for next time step
