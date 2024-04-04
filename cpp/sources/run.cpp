@@ -369,5 +369,8 @@ int main()
     std::cout << "v: \n" <<  v << std::endl;
     std::cout << "p: \n" << p << std::endl;
 
+    // Print final data
+    std::cout << "TOTAL PRESSURE ITERATIONS: " << tot_p_iters << std::endl;
+
     return 0;
 }
