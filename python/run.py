@@ -536,18 +536,18 @@ while current_time < end_time:
     v[free_dofs] += v_n[free_dofs]
     print("Velocity prediction solved.")
 
-    # # Solve pressure update
-    # delta_p_rhs = ApplyDivergenceOperator(v)
-    # delta_p_rhs /= -dt
+    # Solve pressure update
+    delta_p_rhs = ApplyDivergenceOperator(v)
+    delta_p_rhs /= -dt
 
-    # p_iters = 0
-    # def nonlocal_iterate(arr):
-    #     global p_iters
-    #     p_iters += 1
-    # delta_p, converged = scipy.sparse.linalg.cg(pressure_op, delta_p_rhs, tol=1.0e-3, callback=nonlocal_iterate, M=precond)
-    # p += delta_p
-    # tot_p_iters += p_iters
-    # print(f"Pressure iterations: {p_iters}.")
+    p_iters = 0
+    def nonlocal_iterate(arr):
+        global p_iters
+        p_iters += 1
+    delta_p, converged = scipy.sparse.linalg.cg(pressure_op, delta_p_rhs, tol=1.0e-3, callback=nonlocal_iterate, M=precond)
+    p += delta_p
+    tot_p_iters += p_iters
+    print(f"Pressure iterations: {p_iters}.")
 
     # # Correct velocity
     # v[free_dofs] += dt * lumped_mass_vector_inv[free_dofs] * ApplyGradientOperator(delta_p)[free_dofs]

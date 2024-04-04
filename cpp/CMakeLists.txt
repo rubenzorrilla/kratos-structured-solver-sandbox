@@ -36,6 +36,7 @@ file (GLOB_RECURSE KRATOS_STRUCTURED_SOLVER_SANDBOX_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/sources/cell_utilities.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/sources/incompressible_navier_stokes_q1_p0_structured_element.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/sources/mesh_utilities.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/sources/operators.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/sources/runge_kutta_utilities.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/sources/time_utilities.cpp
 ) # Source files directories

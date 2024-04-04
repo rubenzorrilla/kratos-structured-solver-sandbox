@@ -1,10 +1,13 @@
 #include <array>
 #include <iostream>
 #include <Eigen/Dense>
+#include <Eigen/IterativeLinearSolvers>
 
 #include "cell_utilities.hpp"
 #include "incompressible_navier_stokes_q1_p0_structured_element.hpp"
+#include "matrix_replacement.hpp"
 #include "mesh_utilities.hpp"
+#include "operators.hpp"
 #include "runge_kutta_utilities.hpp"
 #include "time_utilities.hpp"
 
@@ -231,13 +234,18 @@ int main()
     RungeKuttaUtilities<rk_order>::SetWeightsVector(rk_B);
     RungeKuttaUtilities<rk_order>::SetRungeKuttaMatrix(rk_A);
 
-    // Allocate auxiliary arrays
+    // Allocate auxiliary arrays for the velocity problem
     constexpr int rk_num_steps = rk_order;
     Eigen::Array<double, Eigen::Dynamic, dim> rk_v(num_nodes, dim);
     std::array<Eigen::Array<double, Eigen::Dynamic, dim>, rk_num_steps> rk_res;
     for (auto& r_arr : rk_res) {
         r_arr.resize(num_nodes, dim);
     }
+
+    // Allocate auxiliary arrays for the pressure problem
+    Eigen::VectorXd delta_p(num_cells);
+    Eigen::VectorXd delta_p_rhs(num_cells);
+    MatrixReplacement<dim> matrix_replacement(box_divisions, cell_size, active_cells, lumped_mass_vector_inv_bcs);
 
     // Time loop
     unsigned int tot_p_iters = 0;
@@ -323,6 +331,17 @@ int main()
             v(dof_row, dof_col) += v_n(dof_row, dof_col);
         }
         std::cout << "Velocity prediction solved." << std::endl;
+
+        // Solve pressure update
+        Operators<dim>::ApplyDivergenceOperator(box_divisions, cell_size, active_cells, v, delta_p_rhs);
+        delta_p_rhs /= -dt;
+
+        Eigen::ConjugateGradient<MatrixReplacement<dim>, Eigen::Lower|Eigen::Upper, Eigen::IdentityPreconditioner> cg;
+        cg.compute(matrix_replacement);
+        delta_p = cg.solve(delta_p_rhs);
+        p += delta_p.array();
+        tot_p_iters += cg.iterations();
+        std::cout << "Pressure iterations: " << cg.iterations() << std::endl;
 
         // Update variables for next time step
         acc = (v - v_n) / dt;
