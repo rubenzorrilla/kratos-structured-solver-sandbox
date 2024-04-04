@@ -114,7 +114,7 @@ void Operators<2>::ApplyDivergenceOperator(
                 CellUtilities::GetCellNodesGlobalIds(i, j, rBoxDivisions, cell_node_ids);
                 auto cell_x = rX(cell_node_ids, Eigen::all);
                 for (unsigned int d = 0; d < 2; ++d) {
-                    rOutput(cell_id) = (cell_gradient_operator.col(d) * cell_x.col(d))(0);
+                    rOutput(cell_id) += (cell_gradient_operator.col(d) * cell_x.col(d)).sum();
                 }
             }
         }

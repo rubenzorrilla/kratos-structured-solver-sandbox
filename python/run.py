@@ -544,17 +544,15 @@ while current_time < end_time:
     def nonlocal_iterate(arr):
         global p_iters
         p_iters += 1
-    delta_p, converged = scipy.sparse.linalg.cg(pressure_op, delta_p_rhs, tol=1.0e-3, callback=nonlocal_iterate, M=precond)
+    # delta_p, converged = scipy.sparse.linalg.cg(pressure_op, delta_p_rhs, tol=1.0e-3, callback=nonlocal_iterate, M=precond)
+    delta_p, converged = scipy.sparse.linalg.cg(pressure_op, delta_p_rhs, tol=1.0e-3, callback=nonlocal_iterate, M=None)
     p += delta_p
     tot_p_iters += p_iters
     print(f"Pressure iterations: {p_iters}.")
 
-    # # Correct velocity
-    # v[free_dofs] += dt * lumped_mass_vector_inv[free_dofs] * ApplyGradientOperator(delta_p)[free_dofs]
-    # print("Velocity update finished.\n")
-
-    # print(f"v: ", v)
-    # print(f"p: ", p)
+    # Correct velocity
+    v[free_dofs] += dt * lumped_mass_vector_inv[free_dofs] * ApplyGradientOperator(delta_p)[free_dofs]
+    print("Velocity update finished.\n")
 
     # Output results
     output_model_part.CloneTimeStep(current_time)

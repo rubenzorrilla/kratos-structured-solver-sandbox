@@ -247,6 +247,9 @@ int main()
     Eigen::VectorXd delta_p_rhs(num_cells);
     MatrixReplacement<dim> matrix_replacement(box_divisions, cell_size, active_cells, lumped_mass_vector_inv_bcs);
 
+    // Allocate auxiliary arrays for the velocity update
+    Eigen::Matrix<double, Eigen::Dynamic, dim> delta_p_grad(num_nodes, dim);
+
     // Time loop
     unsigned int tot_p_iters = 0;
     unsigned int current_step = 1;
@@ -342,6 +345,15 @@ int main()
         p += delta_p.array();
         tot_p_iters += cg.iterations();
         std::cout << "Pressure iterations: " << cg.iterations() << std::endl;
+
+        // Correct velocity
+        Operators<dim>::ApplyGradientOperator(box_divisions, cell_size, active_cells, delta_p, delta_p_grad);
+        for (unsigned int i_dof = 0; i_dof < n_free_dofs; ++i_dof) {
+            const unsigned int dof_row = free_dofs_rows[i_dof];
+            const unsigned int dof_col = free_dofs_cols[i_dof];
+            v(dof_row, dof_col) += dt * lumped_mass_vector_inv(dof_row, dof_col) * delta_p_grad(dof_row, dof_col);
+        }
+        std::cout << "Velocity update finished." << std::endl;
 
         // Update variables for next time step
         acc = (v - v_n) / dt;
