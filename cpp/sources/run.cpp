@@ -256,6 +256,7 @@ int main()
     fft.fwd(fft_y, y_complex);
     Eigen::ArrayXd fft_c = (fft_y.array() / fft_x.array()).real(); // Take the real part only (imaginary one is zero)
     fft_c(0) = 1.0; // Remove the first coefficient as this is associated to the solution average
+    PressurePreconditioner pressure_precond(fft_c); // Instantiate the pressure
 
     // Set Runge-Kutta arrays
     constexpr int rk_order = 4;
@@ -371,7 +372,9 @@ int main()
         Operators<dim>::ApplyDivergenceOperator(box_divisions, cell_size, active_cells, v, delta_p_rhs);
         delta_p_rhs /= -dt;
 
-        Eigen::ConjugateGradient<MatrixReplacement<dim>, Eigen::Lower|Eigen::Upper, Eigen::IdentityPreconditioner> cg;
+        // Eigen::ConjugateGradient<MatrixReplacement<dim>, Eigen::Lower | Eigen::Upper, Eigen::IdentityPreconditioner> cg;
+        Eigen::ConjugateGradient<MatrixReplacement<dim>, Eigen::Lower|Eigen::Upper, PressurePreconditioner> cg;
+        cg.preconditioner() = pressure_precond;
         cg.compute(matrix_replacement);
         delta_p = cg.solve(delta_p_rhs);
         p += delta_p.array();
