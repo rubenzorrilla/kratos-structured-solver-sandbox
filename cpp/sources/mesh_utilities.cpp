@@ -159,7 +159,7 @@ unsigned int MeshUtilities<2>::FindFirstFreeCellId(
             }
         }
     }
-    std::runtime_error("There is no cell with all the DOFs free.");
+    throw std::runtime_error("There is no cell with all the DOFs free.");
     return 0;
 }
 
@@ -180,7 +180,7 @@ unsigned int MeshUtilities<3>::FindFirstFreeCellId(
             }
         }
     }
-    std::runtime_error("There is no cell with all the DOFs free.");
+    throw std::runtime_error("There is no cell with all the DOFs free.");
     return 0;
 }
 

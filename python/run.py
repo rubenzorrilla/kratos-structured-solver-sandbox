@@ -54,7 +54,7 @@ rho = 1.0e0
 
 # Mesh data
 box_size = [5.0,1.0,None]
-box_divisions = [4,1,None]
+box_divisions = [4,4,None]
 # box_divisions = [150,30,None]
 cell_size = [i/j if i is not None else 0.0 for i, j in zip(box_size, box_divisions)]
 if box_size[2] == None:

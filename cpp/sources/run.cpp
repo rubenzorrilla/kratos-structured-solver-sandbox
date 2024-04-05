@@ -2,6 +2,7 @@
 #include <iostream>
 #include <Eigen/Dense>
 #include <Eigen/IterativeLinearSolvers>
+#include <unsupported/Eigen/FFT>
 
 #include "cell_utilities.hpp"
 #include "incompressible_navier_stokes_q1_p0_structured_element.hpp"
@@ -25,7 +26,7 @@ int main()
     // Input mesh data
     const std::array<double, dim> box_size({5.0, 1.0});
     // const std::array<int, dim> box_divisions({150, 30});
-    const std::array<int, dim> box_divisions({4, 1});
+    const std::array<int, dim> box_divisions({4, 4});
 
     // Compute mesh data
     auto mesh_data = MeshUtilities<dim>::CalculateMeshData(box_divisions);
@@ -224,6 +225,36 @@ int main()
     for (unsigned int i_dof = 0; i_dof < n_fixed_dofs; ++i_dof) {
         lumped_mass_vector_inv_bcs(fixed_dofs_rows[i_dof], fixed_dofs_cols[i_dof]) = 0.0;
     }
+
+    // Create the preconditioner for the pressure CG solver
+    // For this we convert the periodic pressure matrix C (with no velocity BCs) to FFT
+    // The simplest way is to generate any vector x, compute the image vector y=C*X
+    // The transform of C is fft(y)./fft(x), as C is cyclic the transformed C must be diagonal
+    // The resulting transformed coefficientes should be real, because the operator is symmetric.
+    // Also it should be semidefinite positive (SPD) because the Laplacian operator is SPD
+    // The first coefficient is null, because the Laplacian is not PD, just SPD.
+    // But we can replace this null coefficient by anything different from 0.
+    // At most it would degrade the convergence of the PCG, but we will see that the convergence is OK.
+    Eigen::VectorXd x(num_cells);
+    Eigen::VectorXd y(num_cells);
+    x.setZero();
+    x(MeshUtilities<dim>::FindFirstFreeCellId(box_divisions, fixity)) = 1.0;
+    Operators<dim>::ApplyPressureOperator(box_divisions, cell_size, active_cells, lumped_mass_vector_inv, x, y);
+
+    Eigen::Matrix<std::complex<double>, Eigen::Dynamic, 1> fft_x(num_cells); // Complex array for FFT(x) output
+    Eigen::Matrix<std::complex<double>, Eigen::Dynamic, 1> fft_y(num_cells); // Complex array for FFT(y) output
+    Eigen::Matrix<std::complex<double>, Eigen::Dynamic, 1> x_complex(num_cells, 1); // Complex array for FFT(x) input
+    Eigen::Matrix<std::complex<double>, Eigen::Dynamic, 1> y_complex(num_cells, 1); // Complex array for FFT(y) input
+    for (unsigned int i = 0; i < num_cells; ++i) {
+        x_complex(i) = x(i); // Set x_complex real data from x
+        y_complex(i) = y(i); // Set y_complex real data from y
+    }
+
+    Eigen::FFT<double> fft;
+    fft.fwd(fft_x, x_complex);
+    fft.fwd(fft_y, y_complex);
+    Eigen::ArrayXd fft_c = (fft_y.array() / fft_x.array()).real(); // Take the real part only (imaginary one is zero)
+    fft_c(0) = 1.0; // Remove the first coefficient as this is associated to the solution average
 
     // Set Runge-Kutta arrays
     constexpr int rk_order = 4;
