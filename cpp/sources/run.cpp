@@ -11,6 +11,7 @@
 #include "operators.hpp"
 #include "pressure_preconditioner.hpp"
 #include "runge_kutta_utilities.hpp"
+#include "sbm_utilities.hpp"
 #include "time_utilities.hpp"
 
 int main()
@@ -95,6 +96,10 @@ int main()
     }
 
     // Find the surrogate boundary
+    Eigen::Array<double, Eigen::Dynamic, dim> v_surrogate(num_nodes, dim);
+    v_surrogate.setZero();
+
+    //TODO: move to sbm_utils
     Eigen::Array<bool, Eigen::Dynamic, 1> surrogate_nodes(num_nodes);
     surrogate_nodes.setZero();
     if constexpr (dim == 2) {
@@ -121,6 +126,7 @@ int main()
         throw std::logic_error("3D case not implemented yet");
     }
 
+    //TODO: move to sbm_utils
     Eigen::Array<bool, Eigen::Dynamic, 1> surrogate_cells(num_cells);
     surrogate_cells.setZero();
     if constexpr (dim == 2) {
@@ -294,7 +300,14 @@ int main()
         std::cout << "### Step " << current_step << " - time " << current_time << " - dt " << dt << " ###" << std::endl;
 
         // Update the surrogate boundary Dirichlet value from the previous time step velocity gradient
-        //TODO:
+        SbmUtilities<dim>::UpdateSurrogateBoundaryDirichletValues(mass_factor, box_divisions, cell_size, surrogate_cells, surrogate_nodes, distance_vects, lumped_mass_vector, v, v_surrogate);
+        //TODO: We can get rid of v_surrogate (but lets keep it for debugging for a while)
+        for (unsigned int i = 0; i < num_nodes; ++i) {
+            if (surrogate_nodes(i)) {
+                v(i, Eigen::all) = v_surrogate.row(i);
+                v_n(i, Eigen::all) = v_surrogate.row(i);
+            }
+        }
 
         // Calculate intermediate residuals
         for (unsigned int rk_step = 0; rk_step < rk_num_steps; ++rk_step) {

@@ -38,6 +38,7 @@ file (GLOB_RECURSE KRATOS_STRUCTURED_SOLVER_SANDBOX_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/sources/mesh_utilities.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/sources/operators.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/sources/runge_kutta_utilities.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/sources/sbm_utilities.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/sources/time_utilities.cpp
 ) # Source files directories
 
