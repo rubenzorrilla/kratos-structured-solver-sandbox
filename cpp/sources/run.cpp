@@ -9,6 +9,7 @@
 #include "matrix_replacement.hpp"
 #include "mesh_utilities.hpp"
 #include "operators.hpp"
+#include "pressure_preconditioner.hpp"
 #include "runge_kutta_utilities.hpp"
 #include "time_utilities.hpp"
 

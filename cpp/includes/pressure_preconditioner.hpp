@@ -50,11 +50,7 @@ public:
         Eigen::FFT<double> fft;
         fft.fwd(fft_b, b_complex);
         fft_b.cwiseQuotient(*mpFFTc);
-
-        // fft_r = np.fft.fft(r)
-        // return np.real(np.fft.ifft(fft_r/fft_c))
-
-
+        b = (fft.inv(fft_b)).real();
 
         return b;
     }
@@ -70,6 +66,4 @@ private:
 
     const Eigen::VectorXd* mpFFTc = nullptr;
 
-}
-
-
+};
