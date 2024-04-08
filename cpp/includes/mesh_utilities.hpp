@@ -19,7 +19,7 @@ public:
     static void CalculateNodalCoordinates(
         const std::array<double, TDim>& rBoxSize,
         const std::array<int, TDim>& rBoxDivisions,
-        Eigen::Array<double, Eigen::Dynamic, Eigen::Dynamic>& rNodalCoords);
+        Eigen::Array<double, Eigen::Dynamic, TDim>& rNodalCoords);
 
     static void CalculateLumpedMassVector(
         const double MassFactor,

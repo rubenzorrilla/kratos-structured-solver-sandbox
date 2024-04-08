@@ -35,7 +35,7 @@ template<int TDim>
 void MeshUtilities<TDim>::CalculateNodalCoordinates(
     const std::array<double, TDim>& rBoxSize,
     const std::array<int, TDim>& rBoxDivisions,
-    Eigen::Array<double, Eigen::Dynamic, Eigen::Dynamic>& rNodalCoords)
+    Eigen::Array<double, Eigen::Dynamic, TDim>& rNodalCoords)
 {
     // Allocate coordinates vector
     const unsigned int num_nodes = std::get<0>(CalculateMeshData(rBoxDivisions));

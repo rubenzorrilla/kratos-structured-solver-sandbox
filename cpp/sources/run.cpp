@@ -1,5 +1,10 @@
 #include <array>
+#include <string>
+#include <fstream>
 #include <iostream>
+#include <unistd.h>
+#include <sys/stat.h>
+
 #include <Eigen/Dense>
 #include <Eigen/IterativeLinearSolvers>
 #include <unsupported/Eigen/FFT>
@@ -44,10 +49,71 @@ int main()
     } else {
         std::cout << "cell_size: [" << cell_size[0] << "," << cell_size[1] << "," << cell_size[2] <<  "]" << std::endl;
     }
+    std::cout << std::endl;
+
+    // Create results directory
+    std::cout << "### OUTPUT FOLDER ###" << std::endl;
+    struct stat buffer;
+    const std::string results_path = "../cpp_output/";
+    if (!(stat(results_path.c_str(), &buffer) == 0 && S_ISDIR(buffer.st_mode))) {
+        const int result = mkdir(results_path.c_str(), 0777); // 0777 means full access to everyone
+        if (result == 0) {
+            std::cout << "Results directory created successfully." << std::endl;
+        } else {
+            std::cerr << "Failed to create results directory." << std::endl;
+        }
+    } else {
+        std::cout << "Results directory already exists." << std::endl;
+    }
+    std::cout << "Writing results to: " << results_path << std::endl;
+    std::cout << std::endl;
+
+    // Purge previous output
+    const bool purge_output = true;
+    if (purge_output) {
+        std::filesystem::remove_all(results_path);
+    }
 
     // Create mesh nodes (only used for fixity and visualization)
-    Eigen::ArrayXXd nodal_coords;
+    Eigen::Array<double, Eigen::Dynamic, dim> nodal_coords;
     MeshUtilities<dim>::CalculateNodalCoordinates(box_size, box_divisions, nodal_coords);
+
+    // Write coordinates and connectivities for postprocess
+    std::ofstream coordinates_file(results_path + "coordinates.txt");
+    if (coordinates_file.is_open()) {
+        for (unsigned int i = 0; i < num_nodes; ++i) {
+            const auto& r_coords = nodal_coords.row(i);
+            if constexpr (dim == 2) {
+                coordinates_file << r_coords(0) << " " << r_coords(1) << " " << 0.0 << std::endl;
+            } else {
+                coordinates_file << r_coords(0) << " " << r_coords(1) << " " << r_coords(2) << std::endl;
+            }
+        }
+    }
+
+    std::ofstream connectivities_file(results_path + "connectivities.txt");
+    if (connectivities_file.is_open()) {
+        if constexpr (dim == 2) {
+            std::array<int,4> cell_node_ids;
+            for (unsigned int i = 0; i < box_divisions[0]; ++i) {
+                for (unsigned int j = 0; j < box_divisions[1]; ++j) {
+                    CellUtilities::GetCellNodesGlobalIds(i, j, box_divisions, cell_node_ids);
+                    connectivities_file << cell_node_ids[0] << " " << cell_node_ids[1] << " " << cell_node_ids[2] << " " << cell_node_ids[3] << std::endl;
+                }
+            }
+        } else {
+            // std::array<int,8> cell_node_ids;
+            // for (unsigned int i = 0; i < box_divisions[0]; ++i) {
+            //     for (unsigned int j = 0; j < box_divisions[1]; ++j) {
+            //         for (unsigned int k = 0; k < box_divisions[2]; ++k) {
+            //             CellUtilities::GetCellNodesGlobalIds(i, j, k, box_divisions, cell_node_ids);
+            //             connectivities_file << cell_node_ids[0] << " " << cell_node_ids[1] << " " << cell_node_ids[2] << " " << cell_node_ids[3] << cell_node_ids[4] << " " << cell_node_ids[5] << " " << cell_node_ids[6] << " " << cell_node_ids[7] << std::endl;
+            //         }
+            //     }
+            // }
+        }
+        connectivities_file.close();
+    }
 
     // Create mesh dataset
     Eigen::ArrayXXd p = Eigen::VectorXd::Zero(num_cells);
@@ -348,7 +414,7 @@ int main()
         delta_p = cg.solve(delta_p_rhs);
         p += delta_p.array();
         tot_p_iters += cg.iterations();
-        std::cout << "Pressure iterations: " << cg.iterations() << std::endl;
+        std::cout << "Pressure problem solved in " << cg.iterations() << " iterations." << std::endl;
 
         // Correct velocity
         Operators<dim>::ApplyGradientOperator(box_divisions, cell_size, active_cells, delta_p, delta_p_grad);
@@ -359,15 +425,25 @@ int main()
         }
         std::cout << "Velocity update finished." << std::endl;
 
+        // Output current step solution
+        const static Eigen::IOFormat out_format(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
+        std::ofstream v_file(results_path + "v_" + std::to_string(current_step) + "_" + std::to_string(current_time) + ".txt");
+        std::ofstream p_file(results_path + "p_" + std::to_string(current_step) + "_" + std::to_string(current_time) + ".txt");
+        if (v_file.is_open()) {
+            v_file << v.format(out_format);
+            v_file.close();
+        }
+        if (p_file.is_open()) {
+            p_file << p.format(out_format);
+            p_file.close();
+        }
+        std::cout << "Results output completed.\n" << std::endl;
+
         // Update variables for next time step
         acc = (v - v_n) / dt;
         v_n = v;
         ++current_step;
         current_time += dt;
-
-        if (current_step == 2) {
-            break;
-        }
     }
 
     std::cout << "v: \n" <<  v << std::endl;
