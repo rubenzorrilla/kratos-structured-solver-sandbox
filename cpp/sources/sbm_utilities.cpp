@@ -6,6 +6,136 @@
 #include "sbm_utilities.hpp"
 
 template <>
+void SbmUtilities<2>::FindSurrogateBoundaryNodes(
+    const std::array<int, 2> &rBoxDivisions,
+    const Eigen::Array<double, Eigen::Dynamic, 1>& rDistance,
+    Eigen::Array<bool, Eigen::Dynamic, 1>& rSurrogateNodes)
+{
+    const unsigned int num_nodes = std::get<0>(MeshUtilities<2>::CalculateMeshData(rBoxDivisions));
+    if (rSurrogateNodes.size() != num_nodes) {
+        rSurrogateNodes.resize(num_nodes);
+    }
+    rSurrogateNodes.setZero();
+
+    std::array<int,4> cell_node_ids;
+    for (unsigned int i = 0; i < rBoxDivisions[0]; ++i) {
+        for (unsigned int j = 0; j < rBoxDivisions[1]; ++j) {
+            CellUtilities::GetCellNodesGlobalIds(i, j, rBoxDivisions, cell_node_ids);
+            std::vector<unsigned int> pos_nodes;
+            std::vector<unsigned int> neg_nodes;
+            const auto cell_distance = rDistance(cell_node_ids, 0);
+            for (unsigned int i_node = 0; i_node < 4; ++i_node) {
+                if (cell_distance[i_node] < 0.0) {
+                    neg_nodes.push_back(cell_node_ids[i_node]);
+                } else {
+                    pos_nodes.push_back(cell_node_ids[i_node]);
+                }
+            }
+            if (pos_nodes.size() != 0 && neg_nodes.size() != 0) {
+                rSurrogateNodes(pos_nodes, 0) = true;
+            }
+        }
+    }
+}
+
+template <>
+void SbmUtilities<3>::FindSurrogateBoundaryNodes(
+    const std::array<int, 3> &rBoxDivisions,
+    const Eigen::Array<double, Eigen::Dynamic, 1>& rDistance,
+    Eigen::Array<bool, Eigen::Dynamic, 1>& rSurrogateNodes)
+{
+    const unsigned int num_nodes = std::get<0>(MeshUtilities<3>::CalculateMeshData(rBoxDivisions));
+    if (rSurrogateNodes.size() != num_nodes) {
+        rSurrogateNodes.resize(num_nodes);
+    }
+    rSurrogateNodes.setZero();
+
+    std::array<int,8> cell_node_ids;
+    for (unsigned int i = 0; i < rBoxDivisions[0]; ++i) {
+        for (unsigned int j = 0; j < rBoxDivisions[1]; ++j) {
+            for (unsigned int k = 0; k < rBoxDivisions[2]; ++k) {
+                CellUtilities::GetCellNodesGlobalIds(i, j, k, rBoxDivisions, cell_node_ids);
+                std::vector<unsigned int> pos_nodes;
+                std::vector<unsigned int> neg_nodes;
+                const auto cell_distance = rDistance(cell_node_ids, 0);
+                for (unsigned int i_node = 0; i_node < 8; ++i_node) {
+                    if (cell_distance[i_node] < 0.0) {
+                        neg_nodes.push_back(cell_node_ids[i_node]);
+                    } else {
+                        pos_nodes.push_back(cell_node_ids[i_node]);
+                    }
+                }
+                if (pos_nodes.size() != 0 && neg_nodes.size() != 0) {
+                    rSurrogateNodes(pos_nodes, 0) = true;
+                }
+            }
+        }
+    }
+}
+
+template <>
+void SbmUtilities<2>::FindSurrogateBoundaryCells(
+    const std::array<int, 2> &rBoxDivisions,
+    const Eigen::Array<double, Eigen::Dynamic, 1>& rDistance,
+    const Eigen::Array<bool, Eigen::Dynamic, 1>& rSurrogateNodes,
+    Eigen::Array<bool, Eigen::Dynamic, 1>& rSurrogateCells)
+{
+    const unsigned int num_cells = std::get<1>(MeshUtilities<2>::CalculateMeshData(rBoxDivisions));
+    if (rSurrogateCells.size() != num_cells) {
+        rSurrogateCells.resize(num_cells);
+    }
+    rSurrogateCells.setZero();
+
+    std::array<int,4> cell_node_ids;
+    for (unsigned int i = 0; i < rBoxDivisions[0]; ++i) {
+        for (unsigned int j = 0; j < rBoxDivisions[1]; ++j) {
+            CellUtilities::GetCellNodesGlobalIds(i, j, rBoxDivisions, cell_node_ids);
+            const auto& r_cell_node_dist = rDistance(cell_node_ids);
+            if (std::none_of(r_cell_node_dist.cbegin(), r_cell_node_dist.cend(), [](const double x){return x < 0.0;})) {
+                for (int node_id : cell_node_ids) {
+                    if (rSurrogateNodes(node_id)) {
+                        rSurrogateCells(CellUtilities::GetCellGlobalId(i, j, rBoxDivisions)) = true;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+}
+
+template <>
+void SbmUtilities<3>::FindSurrogateBoundaryCells(
+    const std::array<int, 3> &rBoxDivisions,
+    const Eigen::Array<double, Eigen::Dynamic, 1>& rDistance,
+    const Eigen::Array<bool, Eigen::Dynamic, 1>& rSurrogateNodes,
+    Eigen::Array<bool, Eigen::Dynamic, 1>& rSurrogateCells)
+{
+    const unsigned int num_cells = std::get<1>(MeshUtilities<3>::CalculateMeshData(rBoxDivisions));
+    if (rSurrogateCells.size() != num_cells) {
+        rSurrogateCells.resize(num_cells);
+    }
+    rSurrogateCells.setZero();
+
+    std::array<int,8> cell_node_ids;
+    for (unsigned int i = 0; i < rBoxDivisions[0]; ++i) {
+        for (unsigned int j = 0; j < rBoxDivisions[1]; ++j) {
+            for (unsigned int k = 0; k < rBoxDivisions[2]; ++k) {
+                CellUtilities::GetCellNodesGlobalIds(i, j, k, rBoxDivisions, cell_node_ids);
+                const auto& r_cell_node_dist = rDistance(cell_node_ids);
+                if (std::none_of(r_cell_node_dist.cbegin(), r_cell_node_dist.cend(), [](const double x){return x < 0.0;})) {
+                    for (int node_id : cell_node_ids) {
+                        if (rSurrogateNodes(node_id)) {
+                            rSurrogateCells(CellUtilities::GetCellGlobalId(i, j, k, rBoxDivisions)) = true;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+template <>
 void SbmUtilities<2>::UpdateSurrogateBoundaryDirichletValues(
     const double MassFactor,
     const std::array<int, 2> &rBoxDivisions,

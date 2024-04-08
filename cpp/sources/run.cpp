@@ -95,59 +95,15 @@ int main()
         distance(i_node) = 1.0;
     }
 
-    // Find the surrogate boundary
+    // Define the surrogate boundary
     Eigen::Array<double, Eigen::Dynamic, dim> v_surrogate(num_nodes, dim);
     v_surrogate.setZero();
 
-    //TODO: move to sbm_utils
     Eigen::Array<bool, Eigen::Dynamic, 1> surrogate_nodes(num_nodes);
-    surrogate_nodes.setZero();
-    if constexpr (dim == 2) {
-        std::array<int,4> cell_node_ids;
-        for (unsigned int i = 0; i < box_divisions[0]; ++i) {
-            for (unsigned int j = 0; j < box_divisions[1]; ++j) {
-                CellUtilities::GetCellNodesGlobalIds(i, j, box_divisions, cell_node_ids);
-                std::vector<unsigned int> pos_nodes;
-                std::vector<unsigned int> neg_nodes;
-                const auto cell_distance = distance(cell_node_ids, 0);
-                for (unsigned int i_node = 0; i_node < 4; ++i_node) {
-                    if (cell_distance[i_node] < 0.0) {
-                        neg_nodes.push_back(cell_node_ids[i_node]);
-                    } else {
-                        pos_nodes.push_back(cell_node_ids[i_node]);
-                    }
-                }
-                if (pos_nodes.size() != 0 && neg_nodes.size() != 0) {
-                    surrogate_nodes(pos_nodes, 0) = true;
-                }
-            }
-        }
-    } else {
-        throw std::logic_error("3D case not implemented yet");
-    }
+    SbmUtilities<dim>::FindSurrogateBoundaryNodes(box_divisions, distance, surrogate_nodes);
 
-    //TODO: move to sbm_utils
     Eigen::Array<bool, Eigen::Dynamic, 1> surrogate_cells(num_cells);
-    surrogate_cells.setZero();
-    if constexpr (dim == 2) {
-        std::array<int,4> cell_node_ids;
-        for (unsigned int i = 0; i < box_divisions[0]; ++i) {
-            for (unsigned int j = 0; j < box_divisions[1]; ++j) {
-                CellUtilities::GetCellNodesGlobalIds(i, j, box_divisions, cell_node_ids);
-                const auto& r_cell_node_dist = distance(cell_node_ids);
-                if (std::none_of(r_cell_node_dist.cbegin(), r_cell_node_dist.cend(), [](const double x){return x < 0.0;})) {
-                    for (int node_id : cell_node_ids) {
-                        if (surrogate_nodes(node_id)) {
-                            surrogate_cells(CellUtilities::GetCellGlobalId(i, j, box_divisions)) = true;
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-    } else {
-        throw std::logic_error("3D case not implemented yet");
-    }
+    SbmUtilities<dim>::FindSurrogateBoundaryCells(box_divisions, distance, surrogate_nodes, surrogate_cells);
 
     // Calculate the distance vectors in the surrogate boundary nodes
     Eigen::Vector<double, dim> aux_dir;
