@@ -33,7 +33,7 @@ int main()
     const double rho = 1.0e0;
 
     // Input mesh data
-    const std::array<double, dim> box_size({5.0, 1.0});
+    const std::array<double, dim> box_size({1.0, 1.0});
     // const std::array<int, dim> box_divisions({150, 30});
     const std::array<int, dim> box_divisions({4, 4});
 
@@ -149,14 +149,24 @@ int main()
             const double y_coord = r_coords(1);
             // v(i_node, 0) = 6.0*y_coord*(1.0-y_coord);
             // v_n(i_node, 0) = 6.0*y_coord*(1.0-y_coord);
-            v(i_node, 0) = 1.0;
-            v_n(i_node, 0) = 1.0;
+            // v(i_node, 0) = 1.0;
+            // v_n(i_node, 0) = 1.0;
+
+            if (y_coord > 0.5) {
+                v(i_node, 0) = y_coord - 0.5;
+                v_n(i_node, 0) = y_coord - 0.5;
+            }
         }
 
-        // Top and bottom wals
-        if ((r_coords[1] < tol) || (r_coords[1] > (1.0-tol))) {
+        // Top wall
+        if (r_coords[1] > (1.0-tol)) {
             fixity(i_node, 1) = true; // y-velocity
         }
+
+        // // Bottom wall
+        // if (r_coords[1] < tol) {
+        //     fixity(i_node, 1) = true; // y-velocity
+        // }
     }
 
     // Calculate the distance values
@@ -168,9 +178,10 @@ int main()
     Eigen::Array<double, Eigen::Dynamic, 1> distance(num_nodes);
     for (unsigned int i_node = 0; i_node < num_nodes; ++i_node) {
         const auto& r_coords = nodal_coords.row(i_node);
-        const double dist = (r_coords - cyl_orig).matrix().norm();
+        // const double dist = (r_coords - cyl_orig).matrix().norm();
         // distance(i_node) = dist < cyl_rad ? - dist : dist;
-        distance(i_node) = 1.0;
+        // distance(i_node) = 1.0;
+        distance(i_node) = r_coords[1] - 0.5;
     }
 
     // Define the surrogate boundary
@@ -224,6 +235,11 @@ int main()
         throw std::logic_error("3D case not implemented yet");
     }
 
+    std::cout << "Active cells" << std::endl;
+    std::cout << active_cells << std::endl;
+    std::cout << "Fixity" << std::endl;
+    std::cout << fixity << std::endl;
+
     // Set forcing term
     f.setZero();
 
@@ -276,27 +292,33 @@ int main()
     // The first coefficient is null, because the Laplacian is not PD, just SPD.
     // But we can replace this null coefficient by anything different from 0.
     // At most it would degrade the convergence of the PCG, but we will see that the convergence is OK.
-    Eigen::VectorXd x(num_cells);
-    Eigen::VectorXd y(num_cells);
-    x.setZero();
-    x(MeshUtilities<dim>::FindFirstFreeCellId(box_divisions, fixity)) = 1.0;
-    Operators<dim>::ApplyPressureOperator(box_divisions, cell_size, active_cells, lumped_mass_vector_inv, x, y);
+    PressurePreconditioner pressure_precond;
+    auto free_cell_result = MeshUtilities<dim>::FindFirstFreeCellId(box_divisions, fixity);
+    if (std::get<0>(free_cell_result)) {
+        Eigen::VectorXd x(num_cells);
+        Eigen::VectorXd y(num_cells);
+        x.setZero();
+        x(std::get<1>(free_cell_result)) = 1.0;
+        Operators<dim>::ApplyPressureOperator(box_divisions, cell_size, active_cells, lumped_mass_vector_inv, x, y);
 
-    Eigen::Matrix<std::complex<double>, Eigen::Dynamic, 1> fft_x(num_cells); // Complex array for FFT(x) output
-    Eigen::Matrix<std::complex<double>, Eigen::Dynamic, 1> fft_y(num_cells); // Complex array for FFT(y) output
-    Eigen::Matrix<std::complex<double>, Eigen::Dynamic, 1> x_complex(num_cells, 1); // Complex array for FFT(x) input
-    Eigen::Matrix<std::complex<double>, Eigen::Dynamic, 1> y_complex(num_cells, 1); // Complex array for FFT(y) input
-    for (unsigned int i = 0; i < num_cells; ++i) {
-        x_complex(i) = x(i); // Set x_complex real data from x
-        y_complex(i) = y(i); // Set y_complex real data from y
+        Eigen::Matrix<std::complex<double>, Eigen::Dynamic, 1> fft_x(num_cells); // Complex array for FFT(x) output
+        Eigen::Matrix<std::complex<double>, Eigen::Dynamic, 1> fft_y(num_cells); // Complex array for FFT(y) output
+        Eigen::Matrix<std::complex<double>, Eigen::Dynamic, 1> x_complex(num_cells, 1); // Complex array for FFT(x) input
+        Eigen::Matrix<std::complex<double>, Eigen::Dynamic, 1> y_complex(num_cells, 1); // Complex array for FFT(y) input
+        for (unsigned int i = 0; i < num_cells; ++i) {
+            x_complex(i) = x(i); // Set x_complex real data from x
+            y_complex(i) = y(i); // Set y_complex real data from y
+        }
+
+        Eigen::FFT<double> fft;
+        fft.fwd(fft_x, x_complex);
+        fft.fwd(fft_y, y_complex);
+        Eigen::ArrayXd fft_c = (fft_y.array() / fft_x.array()).real(); // Take the real part only (imaginary one is zero)
+        fft_c(0) = 1.0; // Remove the first coefficient as this is associated to the solution average
+        pressure_precond.setFFT(fft_c); // Instantiate the pressure preconditioner
+    } else {
+        std::cout << "There is no cell with all the DOFs free. No pressure preconditioner can be set." << std::endl;
     }
-
-    Eigen::FFT<double> fft;
-    fft.fwd(fft_x, x_complex);
-    fft.fwd(fft_y, y_complex);
-    Eigen::ArrayXd fft_c = (fft_y.array() / fft_x.array()).real(); // Take the real part only (imaginary one is zero)
-    fft_c(0) = 1.0; // Remove the first coefficient as this is associated to the solution average
-    PressurePreconditioner pressure_precond(fft_c); // Instantiate the pressure
 
     // Set Runge-Kutta arrays
     constexpr int rk_order = 4;
@@ -353,17 +375,28 @@ int main()
             const double rk_theta = rk_C[rk_step];
             const double rk_step_time = current_time + rk_theta * dt;
             rk_v.setZero();
+            std::cout << "rk_v (before residuals application)" << std::endl;
+            std::cout << rk_v << std::endl;
+            std::cout << rk_step << std::endl;
             for (unsigned int i_step = 0; i_step < rk_step; ++i_step) {
+                std::cout << "WE SHOULDN'T BE HERE!!!" << std::endl;
+                std::cout << "i_step " << i_step << std::endl;
+                std::cout << "rk_step " << rk_step << std::endl;
                 const double a_ij = rk_A(rk_step, i_step);
                 rk_v += a_ij * rk_res[i_step];
             }
             rk_v *= dt * lumped_mass_vector_inv;
             rk_v += v_n;
+            std::cout << "rk_v (before fixity)" << std::endl;
+            std::cout << rk_v << std::endl;
             for (unsigned int i_dof = 0; i_dof < n_fixed_dofs; ++i_dof) {
                 const unsigned int dof_row = fixed_dofs_rows[i_dof];
                 const unsigned int dof_col = fixed_dofs_cols[i_dof];
                 rk_v(dof_row, dof_col) = rk_theta * v(dof_row, dof_col) + (1.0 - rk_theta) * v_n(dof_row, dof_col); // Set BC value in fixed DOFs
             }
+
+            std::cout << "rk_v" << std::endl;
+            std::cout << rk_v << std::endl;
 
             // Calculate current step residual
             if constexpr (dim == 2) {
@@ -376,6 +409,7 @@ int main()
                     for (unsigned int j = 0; j < box_divisions[1]; ++j) {
                         const unsigned int i_cell = CellUtilities::GetCellGlobalId(i, j, box_divisions);
                         if (active_cells(i_cell)) {
+                            std::cout << "Active cell: " << i_cell << std::endl;
                             // Get current cell data
                             CellUtilities::GetCellNodesGlobalIds(i, j, box_divisions, cell_node_ids);
                             const double cell_p = p(i_cell);
@@ -383,8 +417,13 @@ int main()
                             cell_f = f(cell_node_ids, Eigen::all);
                             cell_acc = acc(cell_node_ids, Eigen::all);
 
+                            std::cout << cell_p << std::endl;
+                            std::cout << cell_v << std::endl;
+
                             // Calculate current cell residual
                             IncompressibleNavierStokesQ1P0StructuredElement::CalculateRightHandSide(cell_size[0], cell_size[1], mu, rho, cell_v, cell_p, cell_f, cell_acc, cell_res);
+
+                            std::cout << cell_res << std::endl;
 
                             // Assemble current cell residual
                             unsigned int aux_i = 0;
@@ -397,10 +436,18 @@ int main()
                         }
                     }
                 }
+
+                break;
             } else {
                 throw std::logic_error("3D case not implemented yet");
             }
         }
+
+        std::cout << "Rk res" << std::endl;
+        std::cout << rk_res[0] << std::endl;
+        std::cout << rk_res[1] << std::endl;
+        std::cout << rk_res[2] << std::endl;
+        std::cout << rk_res[3] << std::endl;
 
         // Solve Runge-Kutta step
         for (unsigned int i_dof = 0; i_dof < n_free_dofs; ++i_dof) {
@@ -415,9 +462,17 @@ int main()
         }
         std::cout << "Velocity prediction solved." << std::endl;
 
+        std::cout << "v" << std::endl;
+        std::cout << v << std::endl;
+        std::cout << "v_n" << std::endl;
+        std::cout << v_n << std::endl;
+
         // Solve pressure update
         Operators<dim>::ApplyDivergenceOperator(box_divisions, cell_size, active_cells, v, delta_p_rhs);
         delta_p_rhs /= -dt;
+
+        std::cout << "delta_p_rhs" << std::endl;
+        std::cout << delta_p_rhs << std::endl;
 
         // Eigen::ConjugateGradient<MatrixReplacement<dim>, Eigen::Lower | Eigen::Upper, Eigen::IdentityPreconditioner> cg;
         Eigen::ConjugateGradient<MatrixReplacement<dim>, Eigen::Lower|Eigen::Upper, PressurePreconditioner> cg;
@@ -460,8 +515,8 @@ int main()
         current_time += dt;
     }
 
-    std::cout << "v: \n" <<  v << std::endl;
-    std::cout << "p: \n" << p << std::endl;
+    //std::cout << "v: \n" <<  v << std::endl;
+    //std::cout << "p: \n" << p << std::endl;
 
     // Print final data
     std::cout << "TOTAL PRESSURE ITERATIONS: " << tot_p_iters << std::endl;

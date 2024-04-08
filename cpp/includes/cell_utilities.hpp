@@ -14,7 +14,7 @@ public:
         const unsigned int J,
         const std::array<int, 2>& rBoxDivisions)
     {
-        return I + J * rBoxDivisions[0];
+        return J + I * rBoxDivisions[0];
     }
 
     static unsigned int GetCellGlobalId(
@@ -23,7 +23,7 @@ public:
         const unsigned int K,
         const std::array<int, 3>& rBoxDivisions)
     {
-        return I + J * rBoxDivisions[0] + K * rBoxDivisions[1];
+        return K + I * rBoxDivisions[0] + J * rBoxDivisions[1];
     }
 
     static unsigned int GetNodeGlobalId(
@@ -31,7 +31,7 @@ public:
         const unsigned int J,
         const std::array<int, 2>& rBoxDivisions)
     {
-        return I + J * (rBoxDivisions[0] + 1);
+        return J + I * (rBoxDivisions[0] + 1);
     }
 
     static unsigned int GetNodeGlobalId(
@@ -40,7 +40,7 @@ public:
         const unsigned int K,
         const std::array<int, 3>& rBoxDivisions)
     {
-        return I + J * (rBoxDivisions[0] + 1) + K * (rBoxDivisions[1] + 1);
+        return K + I * (rBoxDivisions[0] + 1) + J * (rBoxDivisions[1] + 1);
     }
 
     static void GetCellNodesGlobalIds(

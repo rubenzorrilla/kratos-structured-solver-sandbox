@@ -145,7 +145,7 @@ void MeshUtilities<3>::CalculateLumpedMassVector(
 }
 
 template <>
-unsigned int MeshUtilities<2>::FindFirstFreeCellId(
+std::tuple<bool, unsigned int> MeshUtilities<2>::FindFirstFreeCellId(
     const std::array<int, 2> &rBoxDivisions,
     const Eigen::Array<bool, Eigen::Dynamic, 2>& rFixity)
 {
@@ -155,16 +155,16 @@ unsigned int MeshUtilities<2>::FindFirstFreeCellId(
             CellUtilities::GetCellNodesGlobalIds(i, j, rBoxDivisions, cell_node_ids);
             const auto cell_fixity = rFixity(cell_node_ids, Eigen::all);
             if (!cell_fixity.any()) {
-                return CellUtilities::GetCellGlobalId(i, j, rBoxDivisions);
+                return std::make_tuple(true, CellUtilities::GetCellGlobalId(i, j, rBoxDivisions));
             }
         }
     }
-    throw std::runtime_error("There is no cell with all the DOFs free.");
-    return 0;
+
+    return std::make_tuple(false, 0);
 }
 
 template <>
-unsigned int MeshUtilities<3>::FindFirstFreeCellId(
+std::tuple<bool, unsigned int> MeshUtilities<3>::FindFirstFreeCellId(
     const std::array<int, 3> &rBoxDivisions,
     const Eigen::Array<bool, Eigen::Dynamic, 3>& rFixity)
 {
@@ -175,13 +175,13 @@ unsigned int MeshUtilities<3>::FindFirstFreeCellId(
                 CellUtilities::GetCellNodesGlobalIds(i, j, k, rBoxDivisions, cell_node_ids);
                 const auto cell_fixity = rFixity(cell_node_ids, Eigen::all);
                 if (!cell_fixity.any()) {
-                    return CellUtilities::GetCellGlobalId(i, j, k, rBoxDivisions);
+                    return std::make_tuple(true, CellUtilities::GetCellGlobalId(i, j, k, rBoxDivisions));
                 }
             }
         }
     }
-    throw std::runtime_error("There is no cell with all the DOFs free.");
-    return 0;
+
+    return std::make_tuple(false, 0);
 }
 
 template class MeshUtilities<2>;

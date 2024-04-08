@@ -18,8 +18,8 @@ public:
     typedef typename Vector::StorageIndex StorageIndex;
     enum
     {
-      ColsAtCompileTime = Eigen::Dynamic,
-      MaxColsAtCompileTime = Eigen::Dynamic
+        ColsAtCompileTime = Eigen::Dynamic,
+        MaxColsAtCompileTime = Eigen::Dynamic
     };
 
     PressurePreconditioner() = default;
@@ -28,6 +28,12 @@ public:
     : mIsInitialized(true)
     , mpFFTc(&rFFTc)
     {
+    }
+
+    void setFFT(const Eigen::VectorXd& rFFTc)
+    {
+        mIsInitialized = true;
+        mpFFTc = &rFFTc;
     }
 
     Eigen::Index rows() const
@@ -61,20 +67,24 @@ public:
     template<typename Rhs, typename Dest>
     void _solve_impl(const Rhs& b, Dest& x) const
     {
-        //TODO: Avoid these copies
-        const unsigned int num_cells = mpFFTc->size();
-        Eigen::Matrix<std::complex<double>, Eigen::Dynamic, 1> fft_b(num_cells); // Complex array for FFT(x) output
-        Eigen::Matrix<std::complex<double>, Eigen::Dynamic, 1> b_complex(num_cells); // Complex array for FFT(x) input
-        for (unsigned int i = 0; i < num_cells; ++i) {
-            b_complex(i) = b(i);
-        }
+        if (mIsInitialized) {
+            //TODO: Avoid these copies
+            const unsigned int num_cells = mpFFTc->size();
+            Eigen::Matrix<std::complex<double>, Eigen::Dynamic, 1> fft_b(num_cells); // Complex array for FFT(x) output
+            Eigen::Matrix<std::complex<double>, Eigen::Dynamic, 1> b_complex(num_cells); // Complex array for FFT(x) input
+            for (unsigned int i = 0; i < num_cells; ++i) {
+                b_complex(i) = b(i);
+            }
 
-        Eigen::FFT<double> fft;
-        Eigen::Matrix<std::complex<double>, Eigen::Dynamic, 1> sol(num_cells);
-        fft.fwd(fft_b, b_complex);
-        fft_b.cwiseQuotient(*mpFFTc);
-        fft.inv(sol, fft_b);
-        x = sol.real();
+            Eigen::FFT<double> fft;
+            Eigen::Matrix<std::complex<double>, Eigen::Dynamic, 1> sol(num_cells);
+            fft.fwd(fft_b, b_complex);
+            fft_b.cwiseQuotient(*mpFFTc);
+            fft.inv(sol, fft_b);
+            x = sol.real();
+        } else {
+            std::cout << "Pressure preconditioner is not initialized. Using do-nothing identity one." << std::endl;
+        }
     }
 
     template<typename Rhs>
@@ -94,5 +104,4 @@ private:
 
     const Eigen::VectorXd* mpFFTc = nullptr;
 
-    Eigen::Matrix<std::complex<double>, Eigen::Dynamic, 1> mSol;
 };

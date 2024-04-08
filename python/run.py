@@ -53,7 +53,7 @@ mu = 2.0e-3
 rho = 1.0e0
 
 # Mesh data
-box_size = [5.0,1.0,None]
+box_size = [1.0,1.0,None]
 box_divisions = [4,4,None]
 # box_divisions = [150,30,None]
 cell_size = [i/j if i is not None else 0.0 for i, j in zip(box_size, box_divisions)]
@@ -77,16 +77,17 @@ def CalculateMeshData(box_divisions):
     return num_nodes, num_cells
 
 def GetCellGlobalId(i, j, k):
-    cell_id = i + j * box_divisions[0]
+    cell_id = j + i * box_divisions[0]
     if k is not None:
         cell_id += k * box_divisions[1]
 
     return int(cell_id)
 
 def GetNodeGlobalId(i, j, k):
-    global_id = i + j * (box_divisions[0] + 1)
-    if k is not None:
-        global_id += k * (box_divisions[1] + 1)
+    if k is None:
+        global_id = j + i * (box_divisions[0] + 1)
+    else:
+        global_id += k + j * (box_divisions[1] + 1) + i * (box_divisions[0] + 1)
 
     return int(global_id)
 
@@ -207,17 +208,27 @@ fixity = np.zeros((num_nodes,dim), dtype=bool)
 tol = 1.0e-6
 for i_node in range(num_nodes):
     node = nodes[i_node]
-    if node[0] < tol: # Inlet
+    # Inlet
+    if node[0] < tol:
         fixity[i_node, 0] = True # x-velocity
         fixity[i_node, 1] = True # y-velocity
         # v[i_node, 0] = True
         # v_n[i_node, 0] = True
         y_coord = nodes[i_node][1]
-        v[i_node, 0] = 1.0
-        v_n[i_node, 0] = 1.0
+        # v[i_node, 0] = 1.0
+        # v_n[i_node, 0] = 1.0
         # v[i_node, 0] = 6.0*y_coord*(1.0-y_coord)
         # v_n[i_node, 0] = 6.0*y_coord*(1.0-y_coord)
-    if ((node[1] < tol) or (node[1] > (1.0-tol))): # Top and bottom walls
+        if y_coord > 0.5:
+            v[i_node, 0] = y_coord - 0.5
+            v_n[i_node, 0] = y_coord - 0.5
+
+    # Top wall
+    if node[1] > (1.0-tol):
+        fixity[i_node, 1] = True # y-velocity
+
+    # Bottom wall
+    if node[1] < tol:
         fixity[i_node, 1] = True # y-velocity
 
 # Calculate the distance values
@@ -226,8 +237,9 @@ cyl_orig = [1.25,0.5]
 distance = np.empty(num_nodes)
 for i_node in range(num_nodes):
     node = nodes[i_node]
-    dist = np.linalg.norm(node - cyl_orig)
-    distance[i_node] = 1.0
+    distance[i_node] = node[1] - 0.5
+    # dist = np.linalg.norm(node - cyl_orig)
+    # distance[i_node] = 1.0
     # distance[i_node] = - dist if dist < cyl_rad else dist
 
 # Find the surrogate boundary
@@ -427,6 +439,7 @@ def FindFirstFreeCellId():
                     cell_node_ids = GetCellNodesGlobalIds(i, j, k)
                     if not fixity[cell_node_ids, :].any():
                         return GetCellGlobalId(i, j, k)
+    return False, 0
 
 # Create the preconditioner for the pressure CG solver
 # For this we convert the periodic pressure matrix C (with no velocity BCs) to FFT
@@ -438,19 +451,24 @@ def FindFirstFreeCellId():
 # But we can replace this null coefficient by anything different from 0.
 # At most it would degrade the convergence of the PCG, but we will see that the convergence is OK.
 x = np.zeros((num_cells))
-x[FindFirstFreeCellId()] = 1.0
-y = ApplyPressureOperator(x, lumped_mass_vector_inv)
+found, free_cell_id = FindFirstFreeCellId()
+if found:
+    x[free_cell_id] = 1.0
+    y = ApplyPressureOperator(x, lumped_mass_vector_inv)
 
-fft_x = np.fft.fft(x)
-fft_y = np.fft.fft(y)
-fft_c = np.real(fft_y / fft_x)# Take the real part only (imaginary one is zero)
-fft_c[0] = 1.0 # Remove the first coefficient as this is associated to the solution average
+    fft_x = np.fft.fft(x)
+    fft_y = np.fft.fft(y)
+    fft_c = np.real(fft_y / fft_x)# Take the real part only (imaginary one is zero)
+    fft_c[0] = 1.0 # Remove the first coefficient as this is associated to the solution average
 
-def apply_precond(r):
-    fft_r = np.fft.fft(r)
-    return np.real(np.fft.ifft(fft_r/fft_c))
+    def apply_precond(r):
+        fft_r = np.fft.fft(r)
+        return np.real(np.fft.ifft(fft_r/fft_c))
 
-precond = scipy.sparse.linalg.LinearOperator((num_cells, num_cells), matvec=apply_precond)
+    precond = scipy.sparse.linalg.LinearOperator((num_cells, num_cells), matvec=apply_precond)
+else:
+    print("There is no cell with all the DOFs free. No pressure preconditioner can be set.")
+    precond = None
 
 # Set the pressure operator
 # Note that the velocity fixity needs to be considered in the lumped mass operator in here
@@ -519,6 +537,8 @@ while current_time < end_time:
                         # Calculate current cell residual
                         cell_res = element.CalculateRightHandSide(cell_size[0], cell_size[1], cell_size[2], mu, rho, cell_v, cell_p, cell_f, cell_acc)
 
+                        print(cell_res)
+
                         # Assemble current cell residual
                         aux_i = 0
                         for id_node in i_cell_nodes:
@@ -527,6 +547,13 @@ while current_time < end_time:
                             aux_i += 1
         else:
             raise NotImplementedError
+
+        err
+
+    print(rk_res[0])
+    print(rk_res[1])
+    print(rk_res[2])
+    print(rk_res[3])
 
     # Solve Runge-Kutta step
     v[free_dofs] = 0.0
@@ -540,12 +567,15 @@ while current_time < end_time:
     delta_p_rhs = ApplyDivergenceOperator(v)
     delta_p_rhs /= -dt
 
+    print(v)
+    print(delta_p_rhs)
+    err
+
     p_iters = 0
     def nonlocal_iterate(arr):
         global p_iters
         p_iters += 1
-    # delta_p, converged = scipy.sparse.linalg.cg(pressure_op, delta_p_rhs, tol=1.0e-3, callback=nonlocal_iterate, M=precond)
-    delta_p, converged = scipy.sparse.linalg.cg(pressure_op, delta_p_rhs, tol=1.0e-3, callback=nonlocal_iterate, M=None)
+    delta_p, converged = scipy.sparse.linalg.cg(pressure_op, delta_p_rhs, tol=1.0e-3, callback=nonlocal_iterate, M=precond)
     p += delta_p
     tot_p_iters += p_iters
     print(f"Pressure iterations: {p_iters}.")
@@ -599,9 +629,6 @@ while current_time < end_time:
     v_n = v.copy()
     current_step += 1
     current_time += dt
-
-    if current_step == 2:
-        break
 
 # Finalize results
 gid_output.ExecuteFinalize()
