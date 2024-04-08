@@ -1,9 +1,11 @@
 #include <array>
 #include <string>
+#include <sstream>
 #include <fstream>
 #include <iostream>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <filesystem>
 
 #include <Eigen/Dense>
 #include <Eigen/IterativeLinearSolvers>
@@ -71,7 +73,17 @@ int main()
     // Purge previous output
     const bool purge_output = true;
     if (purge_output) {
-        std::filesystem::remove_all(results_path);
+        // Remove txt and lst files
+        for (const auto& entry : std::filesystem::directory_iterator(results_path)) {
+            if (entry.path().extension() == ".txt") {
+                std::filesystem::remove(entry.path());
+            } else if (entry.path().extension() == ".lst") {
+                std::filesystem::remove(entry.path());
+            }
+        }
+        // Remove complete directories
+        std::filesystem::remove_all(results_path + "gid_output/");
+        std::filesystem::remove_all(results_path + "vtu_output/");
     }
 
     // Create mesh nodes (only used for fixity and visualization)
@@ -427,13 +439,15 @@ int main()
 
         // Output current step solution
         const static Eigen::IOFormat out_format(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
-        std::ofstream v_file(results_path + "v_" + std::to_string(current_step) + "_" + std::to_string(current_time) + ".txt");
-        std::ofstream p_file(results_path + "p_" + std::to_string(current_step) + "_" + std::to_string(current_time) + ".txt");
+        std::ofstream v_file(results_path + "v_" + std::to_string(current_step) + ".txt");
+        std::ofstream p_file(results_path + "p_" + std::to_string(current_step) + ".txt");
         if (v_file.is_open()) {
+            v_file << current_time << std::endl;
             v_file << v.format(out_format);
             v_file.close();
         }
         if (p_file.is_open()) {
+            p_file << current_time << std::endl;
             p_file << p.format(out_format);
             p_file.close();
         }
