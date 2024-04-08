@@ -2,6 +2,7 @@
 #include <string>
 #include <sstream>
 #include <fstream>
+#include <numeric>
 #include <iostream>
 #include <unistd.h>
 #include <sys/stat.h>
@@ -200,9 +201,12 @@ int main()
     for (unsigned int i_node = 0; i_node < num_nodes; ++i_node) {
         if (surrogate_nodes(i_node)) {
             const auto& r_coords = nodal_coords.row(i_node);
-            aux_dir = cyl_orig - r_coords;
-            aux_dir /= aux_dir.norm();
-            distance_vects.row(i_node) = distance[i_node] * aux_dir;
+            // aux_dir = cyl_orig - r_coords;
+            // aux_dir /= aux_dir.norm();
+            // distance_vects.row(i_node) = distance[i_node] * aux_dir;
+            // distance_vects.row(i_node) = distance[i_node] * aux_dir;
+            distance_vects(i_node, 0) = 0.0;
+            distance_vects(i_node, 1) = distance[i_node];
         }
     }
 
@@ -356,7 +360,7 @@ int main()
         std::cout << "### Step " << current_step << " - time " << current_time << " - dt " << dt << " ###" << std::endl;
 
         // Update the surrogate boundary Dirichlet value from the previous time step velocity gradient
-        SbmUtilities<dim>::UpdateSurrogateBoundaryDirichletValues(mass_factor, box_divisions, cell_size, surrogate_cells, surrogate_nodes, distance_vects, lumped_mass_vector, v, v_surrogate);
+        SbmUtilities<dim>::UpdateSurrogateBoundaryDirichletValues(mass_factor, box_divisions, cell_size, surrogate_cells, surrogate_nodes, lumped_mass_vector, distance_vects, v, v_surrogate);
         //TODO: We can get rid of v_surrogate (but lets keep it for debugging for a while)
         for (unsigned int i = 0; i < num_nodes; ++i) {
             if (surrogate_nodes(i)) {
@@ -375,28 +379,18 @@ int main()
             const double rk_theta = rk_C[rk_step];
             const double rk_step_time = current_time + rk_theta * dt;
             rk_v.setZero();
-            std::cout << "rk_v (before residuals application)" << std::endl;
-            std::cout << rk_v << std::endl;
-            std::cout << rk_step << std::endl;
             for (unsigned int i_step = 0; i_step < rk_step; ++i_step) {
-                std::cout << "WE SHOULDN'T BE HERE!!!" << std::endl;
-                std::cout << "i_step " << i_step << std::endl;
-                std::cout << "rk_step " << rk_step << std::endl;
                 const double a_ij = rk_A(rk_step, i_step);
                 rk_v += a_ij * rk_res[i_step];
             }
             rk_v *= dt * lumped_mass_vector_inv;
             rk_v += v_n;
-            std::cout << "rk_v (before fixity)" << std::endl;
-            std::cout << rk_v << std::endl;
+
             for (unsigned int i_dof = 0; i_dof < n_fixed_dofs; ++i_dof) {
                 const unsigned int dof_row = fixed_dofs_rows[i_dof];
                 const unsigned int dof_col = fixed_dofs_cols[i_dof];
                 rk_v(dof_row, dof_col) = rk_theta * v(dof_row, dof_col) + (1.0 - rk_theta) * v_n(dof_row, dof_col); // Set BC value in fixed DOFs
             }
-
-            std::cout << "rk_v" << std::endl;
-            std::cout << rk_v << std::endl;
 
             // Calculate current step residual
             if constexpr (dim == 2) {
@@ -409,7 +403,6 @@ int main()
                     for (unsigned int j = 0; j < box_divisions[1]; ++j) {
                         const unsigned int i_cell = CellUtilities::GetCellGlobalId(i, j, box_divisions);
                         if (active_cells(i_cell)) {
-                            std::cout << "Active cell: " << i_cell << std::endl;
                             // Get current cell data
                             CellUtilities::GetCellNodesGlobalIds(i, j, box_divisions, cell_node_ids);
                             const double cell_p = p(i_cell);
@@ -417,13 +410,8 @@ int main()
                             cell_f = f(cell_node_ids, Eigen::all);
                             cell_acc = acc(cell_node_ids, Eigen::all);
 
-                            std::cout << cell_p << std::endl;
-                            std::cout << cell_v << std::endl;
-
                             // Calculate current cell residual
                             IncompressibleNavierStokesQ1P0StructuredElement::CalculateRightHandSide(cell_size[0], cell_size[1], mu, rho, cell_v, cell_p, cell_f, cell_acc, cell_res);
-
-                            std::cout << cell_res << std::endl;
 
                             // Assemble current cell residual
                             unsigned int aux_i = 0;
@@ -443,12 +431,6 @@ int main()
             }
         }
 
-        std::cout << "Rk res" << std::endl;
-        std::cout << rk_res[0] << std::endl;
-        std::cout << rk_res[1] << std::endl;
-        std::cout << rk_res[2] << std::endl;
-        std::cout << rk_res[3] << std::endl;
-
         // Solve Runge-Kutta step
         for (unsigned int i_dof = 0; i_dof < n_free_dofs; ++i_dof) {
             const unsigned int dof_row = free_dofs_rows[i_dof];
@@ -462,23 +444,20 @@ int main()
         }
         std::cout << "Velocity prediction solved." << std::endl;
 
-        std::cout << "v" << std::endl;
-        std::cout << v << std::endl;
-        std::cout << "v_n" << std::endl;
-        std::cout << v_n << std::endl;
-
         // Solve pressure update
         Operators<dim>::ApplyDivergenceOperator(box_divisions, cell_size, active_cells, v, delta_p_rhs);
         delta_p_rhs /= -dt;
 
-        std::cout << "delta_p_rhs" << std::endl;
-        std::cout << delta_p_rhs << std::endl;
-
         // Eigen::ConjugateGradient<MatrixReplacement<dim>, Eigen::Lower | Eigen::Upper, Eigen::IdentityPreconditioner> cg;
         Eigen::ConjugateGradient<MatrixReplacement<dim>, Eigen::Lower|Eigen::Upper, PressurePreconditioner> cg;
+        std::cout << "Before assigning precond" << std::endl;
         cg.preconditioner() = pressure_precond;
+        std::cout << "Before cg.compute" << std::endl;
         cg.compute(matrix_replacement);
+        std::cout << "Before cg.solve" << std::endl;
+        std::cout << delta_p_rhs << std::endl;
         delta_p = cg.solve(delta_p_rhs);
+        std::cout << delta_p << std::endl;
         p += delta_p.array();
         tot_p_iters += cg.iterations();
         std::cout << "Pressure problem solved in " << cg.iterations() << " iterations." << std::endl;

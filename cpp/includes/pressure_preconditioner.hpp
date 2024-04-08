@@ -67,6 +67,7 @@ public:
     template<typename Rhs, typename Dest>
     void _solve_impl(const Rhs& b, Dest& x) const
     {
+        std::cout << "_solve_impl" << std::endl;
         if (mIsInitialized) {
             //TODO: Avoid these copies
             const unsigned int num_cells = mpFFTc->size();
@@ -90,7 +91,11 @@ public:
     template<typename Rhs>
     inline const Eigen::Solve<PressurePreconditioner, Rhs> solve(const Eigen::MatrixBase<Rhs>& b) const
     {
-      return Eigen::Solve<PressurePreconditioner, Rhs>(*this, b.derived());
+        std::cout << "Inside precond solve()" << std::endl;
+        std::cout << b << std::endl;
+        std::cout << this->rows() << std::endl;
+        std::cout << this->cols() << std::endl;
+        return Eigen::Solve<PressurePreconditioner, Rhs>(*this, b.derived());
     }
 
     Eigen::ComputationInfo info()
