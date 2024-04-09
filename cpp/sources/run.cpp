@@ -150,13 +150,14 @@ int main()
             const double y_coord = r_coords(1);
             // v(i_node, 0) = 6.0*y_coord*(1.0-y_coord);
             // v_n(i_node, 0) = 6.0*y_coord*(1.0-y_coord);
-            // v(i_node, 0) = 1.0;
-            // v_n(i_node, 0) = 1.0;
 
-            if (y_coord > 0.5) {
-                v(i_node, 0) = y_coord - 0.5;
-                v_n(i_node, 0) = y_coord - 0.5;
-            }
+            v(i_node, 0) = 1.0;
+            v_n(i_node, 0) = 1.0;
+
+            // if (y_coord > 0.5) {
+            //     v(i_node, 0) = y_coord - 0.5;
+            //     v_n(i_node, 0) = y_coord - 0.5;
+            // }
         }
 
         // Top wall
@@ -164,10 +165,10 @@ int main()
             fixity(i_node, 1) = true; // y-velocity
         }
 
-        // // Bottom wall
-        // if (r_coords[1] < tol) {
-        //     fixity(i_node, 1) = true; // y-velocity
-        // }
+        // Bottom wall
+        if (r_coords[1] < tol) {
+            fixity(i_node, 1) = true; // y-velocity
+        }
     }
 
     // Calculate the distance values
@@ -181,8 +182,8 @@ int main()
         const auto& r_coords = nodal_coords.row(i_node);
         // const double dist = (r_coords - cyl_orig).matrix().norm();
         // distance(i_node) = dist < cyl_rad ? - dist : dist;
-        // distance(i_node) = 1.0;
-        distance(i_node) = r_coords[1] - 0.5;
+        distance(i_node) = 1.0;
+        // distance(i_node) = r_coords[1] - 0.5;
     }
 
     // Define the surrogate boundary
@@ -299,6 +300,7 @@ int main()
     PressurePreconditioner pressure_precond;
     auto free_cell_result = MeshUtilities<dim>::FindFirstFreeCellId(box_divisions, fixity);
     if (std::get<0>(free_cell_result)) {
+        std::cout << "free_cell: " << std::get<1>(free_cell_result) << std::endl;
         Eigen::VectorXd x(num_cells);
         Eigen::VectorXd y(num_cells);
         x.setZero();
@@ -492,6 +494,11 @@ int main()
         v_n = v;
         ++current_step;
         current_time += dt;
+
+        if (current_step == 3) {
+            break;
+        }
+
     }
 
     //std::cout << "v: \n" <<  v << std::endl;

@@ -92,9 +92,6 @@ public:
     inline const Eigen::Solve<PressurePreconditioner, Rhs> solve(const Eigen::MatrixBase<Rhs>& b) const
     {
         std::cout << "Inside precond solve()" << std::endl;
-        std::cout << b << std::endl;
-        std::cout << this->rows() << std::endl;
-        std::cout << this->cols() << std::endl;
         return Eigen::Solve<PressurePreconditioner, Rhs>(*this, b.derived());
     }
 
