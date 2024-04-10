@@ -52,10 +52,9 @@ int main()
     } else {
         std::cout << "cell_size: [" << cell_size[0] << "," << cell_size[1] << "," << cell_size[2] <<  "]" << std::endl;
     }
-    std::cout << std::endl;
 
     // Create results directory
-    std::cout << "### OUTPUT FOLDER ###" << std::endl;
+    std::cout << "\n### OUTPUT FOLDER ###" << std::endl;
     struct stat buffer;
     const std::string results_path = "../cpp_output/";
     if (!(stat(results_path.c_str(), &buffer) == 0 && S_ISDIR(buffer.st_mode))) {
@@ -69,7 +68,6 @@ int main()
         std::cout << "Results directory already exists." << std::endl;
     }
     std::cout << "Writing results to: " << results_path << std::endl;
-    std::cout << std::endl;
 
     // Purge previous output
     const bool purge_output = true;
@@ -129,7 +127,7 @@ int main()
     }
 
     // Create mesh dataset
-    Eigen::ArrayXXd p = Eigen::VectorXd::Zero(num_cells);
+    Eigen::ArrayXd p = Eigen::VectorXd::Zero(num_cells);
     Eigen::ArrayXXd f = Eigen::MatrixXd::Zero(num_nodes, dim);
     Eigen::ArrayXXd v = Eigen::MatrixXd::Zero(num_nodes, dim);
     Eigen::ArrayXXd v_n = Eigen::MatrixXd::Zero(num_nodes, dim);
@@ -240,11 +238,6 @@ int main()
         throw std::logic_error("3D case not implemented yet");
     }
 
-    std::cout << "Active cells" << std::endl;
-    std::cout << active_cells << std::endl;
-    std::cout << "Fixity" << std::endl;
-    std::cout << fixity << std::endl;
-
     // Set forcing term
     f.setZero();
 
@@ -297,10 +290,10 @@ int main()
     // The first coefficient is null, because the Laplacian is not PD, just SPD.
     // But we can replace this null coefficient by anything different from 0.
     // At most it would degrade the convergence of the PCG, but we will see that the convergence is OK.
+    Eigen::ArrayXd fft_c(num_cells);
     PressurePreconditioner pressure_precond;
     auto free_cell_result = MeshUtilities<dim>::FindFirstFreeCellId(box_divisions, fixity);
     if (std::get<0>(free_cell_result)) {
-        std::cout << "free_cell: " << std::get<1>(free_cell_result) << std::endl;
         Eigen::VectorXd x(num_cells);
         Eigen::VectorXd y(num_cells);
         x.setZero();
@@ -319,7 +312,7 @@ int main()
         Eigen::FFT<double> fft;
         fft.fwd(fft_x, x_complex);
         fft.fwd(fft_y, y_complex);
-        Eigen::ArrayXd fft_c = (fft_y.array() / fft_x.array()).real(); // Take the real part only (imaginary one is zero)
+        fft_c = (fft_y.array() / fft_x.array()).real(); // Take the real part only (imaginary one is zero)
         fft_c(0) = 1.0; // Remove the first coefficient as this is associated to the solution average
         pressure_precond.setFFT(fft_c); // Instantiate the pressure preconditioner
     } else {
@@ -359,7 +352,7 @@ int main()
         // Compute time increment with CFL and Fourier conditions
         // Note that we use the current step velocity to be updated as it equals the previous one at this point
         const double dt = TimeUtilities<dim>::CalculateDeltaTime(rho, mu, cell_size, v, 0.2, 0.2);
-        std::cout << "### Step " << current_step << " - time " << current_time << " - dt " << dt << " ###" << std::endl;
+        std::cout << "\n### Step " << current_step << " - time " << current_time << " - dt " << dt << " ###" << std::endl;
 
         // Update the surrogate boundary Dirichlet value from the previous time step velocity gradient
         SbmUtilities<dim>::UpdateSurrogateBoundaryDirichletValues(mass_factor, box_divisions, cell_size, surrogate_cells, surrogate_nodes, lumped_mass_vector, distance_vects, v, v_surrogate);
@@ -448,18 +441,16 @@ int main()
 
         // Solve pressure update
         Operators<dim>::ApplyDivergenceOperator(box_divisions, cell_size, active_cells, v, delta_p_rhs);
-        delta_p_rhs /= -dt;
+        for (unsigned int i = 0; i < num_cells; ++i) {
+            delta_p_rhs(i) = -delta_p_rhs(i) / dt;
+        }
+        // delta_p_rhs /= -dt;
 
         // Eigen::ConjugateGradient<MatrixReplacement<dim>, Eigen::Lower | Eigen::Upper, Eigen::IdentityPreconditioner> cg;
         Eigen::ConjugateGradient<MatrixReplacement<dim>, Eigen::Lower|Eigen::Upper, PressurePreconditioner> cg;
-        std::cout << "Before assigning precond" << std::endl;
         cg.preconditioner() = pressure_precond;
-        std::cout << "Before cg.compute" << std::endl;
         cg.compute(matrix_replacement);
-        std::cout << "Before cg.solve" << std::endl;
-        std::cout << delta_p_rhs << std::endl;
         delta_p = cg.solve(delta_p_rhs);
-        std::cout << delta_p << std::endl;
         p += delta_p.array();
         tot_p_iters += cg.iterations();
         std::cout << "Pressure problem solved in " << cg.iterations() << " iterations." << std::endl;
@@ -473,32 +464,27 @@ int main()
         }
         std::cout << "Velocity update finished." << std::endl;
 
-        // Output current step solution
-        const static Eigen::IOFormat out_format(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
-        std::ofstream v_file(results_path + "v_" + std::to_string(current_step) + ".txt");
-        std::ofstream p_file(results_path + "p_" + std::to_string(current_step) + ".txt");
-        if (v_file.is_open()) {
-            v_file << current_time << std::endl;
-            v_file << v.format(out_format);
-            v_file.close();
-        }
-        if (p_file.is_open()) {
-            p_file << current_time << std::endl;
-            p_file << p.format(out_format);
-            p_file.close();
-        }
-        std::cout << "Results output completed.\n" << std::endl;
+        // // Output current step solution
+        // const static Eigen::IOFormat out_format(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
+        // std::ofstream v_file(results_path + "v_" + std::to_string(current_step) + ".txt");
+        // std::ofstream p_file(results_path + "p_" + std::to_string(current_step) + ".txt");
+        // if (v_file.is_open()) {
+        //     v_file << current_time << std::endl;
+        //     v_file << v.format(out_format);
+        //     v_file.close();
+        // }
+        // if (p_file.is_open()) {
+        //     p_file << current_time << std::endl;
+        //     p_file << p.format(out_format);
+        //     p_file.close();
+        // }
+        // std::cout << "Results output completed.\n" << std::endl;
 
         // Update variables for next time step
         acc = (v - v_n) / dt;
         v_n = v;
         ++current_step;
         current_time += dt;
-
-        if (current_step == 3) {
-            break;
-        }
-
     }
 
     //std::cout << "v: \n" <<  v << std::endl;

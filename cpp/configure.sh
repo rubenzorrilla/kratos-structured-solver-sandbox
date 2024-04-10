@@ -9,7 +9,7 @@ export SOURCE_DIR="/home/rzorrilla/kratos-structured-solver-sandbox/cpp"
 export BUILD_DIR="${SOURCE_DIR}/build"
 
 # Set basic configuration
-export BUILD_TYPE="Release"
+export BUILD_TYPE="FullDebug"
 
 # Clean
 clear
