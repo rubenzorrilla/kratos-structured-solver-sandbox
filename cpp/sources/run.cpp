@@ -129,6 +129,7 @@ int main()
 
     // Create mesh dataset
     Eigen::ArrayXd p = Eigen::VectorXd::Zero(num_cells);
+    Eigen::ArrayXd p_zorri = Eigen::VectorXd::Zero(num_cells);
     Eigen::ArrayXXd f = Eigen::MatrixXd::Zero(num_nodes, dim);
     Eigen::ArrayXXd v = Eigen::MatrixXd::Zero(num_nodes, dim);
     Eigen::ArrayXXd v_n = Eigen::MatrixXd::Zero(num_nodes, dim);
@@ -147,11 +148,11 @@ int main()
             fixity(i_node, 0) = true; // x-velocity
             fixity(i_node, 1) = true; // y-velocity
             const double y_coord = r_coords(1);
-            // v(i_node, 0) = 6.0*y_coord*(1.0-y_coord);
-            // v_n(i_node, 0) = 6.0*y_coord*(1.0-y_coord);
+            v(i_node, 0) = 6.0*y_coord*(1.0-y_coord);
+            v_n(i_node, 0) = 6.0*y_coord*(1.0-y_coord);
 
-            v(i_node, 0) = 1.0;
-            v_n(i_node, 0) = 1.0;
+            // v(i_node, 0) = 1.0;
+            // v_n(i_node, 0) = 1.0;
 
             // if (y_coord > 0.5) {
             //     v(i_node, 0) = y_coord - 0.5;
@@ -293,14 +294,17 @@ int main()
     // The first coefficient is null, because the Laplacian is not PD, just SPD.
     // But we can replace this null coefficient by anything different from 0.
     // At most it would degrade the convergence of the PCG, but we will see that the convergence is OK.
+    std::cout << "\n### PRESSURE PRECONDITIONER SET-UP ###" << std::endl;
     Eigen::ArrayXd fft_c(num_cells);
     PressurePreconditioner pressure_precond;
     auto free_cell_result = MeshUtilities<dim>::FindFirstFreeCellId(box_divisions, fixity);
     if (std::get<0>(free_cell_result)) {
+        const unsigned int free_cell_id = std::get<1>(free_cell_result);
+        std::cout << "Free cell id: " << free_cell_id << "." <<std::endl;
         Eigen::VectorXd x(num_cells);
         Eigen::VectorXd y(num_cells);
         x.setZero();
-        x(std::get<1>(free_cell_result)) = 1.0;
+        x(free_cell_id) = 1.0;
         Operators<dim>::ApplyPressureOperator(box_divisions, cell_size, active_cells, lumped_mass_vector_inv, x, y);
 
         Eigen::Matrix<std::complex<double>, Eigen::Dynamic, 1> fft_x(num_cells); // Complex array for FFT(x) output
@@ -347,10 +351,11 @@ int main()
     // Allocate auxiliary arrays for the velocity update
     Eigen::Matrix<double, Eigen::Dynamic, dim> delta_p_grad(num_nodes, dim);
 
-    const double abs_tol = 1.0e-6;
+    const double abs_tol = 1.0e-15;
+    const double rel_tol = 1.0e-15;
     const double max_iter = 200;
     PressureOperator<dim> pressure_operator(box_divisions, cell_size, active_cells_vect, lumped_mass_vector_inv_bcs);
-    PressureConjugateGradientSolver<dim> cg_zorri(abs_tol, max_iter, pressure_operator, fft_c);
+    PressureConjugateGradientSolver<dim> cg_zorri(abs_tol, rel_tol, max_iter, pressure_operator, fft_c);
 
     Eigen::Array<double, Eigen::Dynamic, 1> delta_p_zorri(num_cells);
     delta_p_zorri.setZero();
@@ -455,7 +460,6 @@ int main()
         for (unsigned int i = 0; i < num_cells; ++i) {
             delta_p_rhs(i) = -delta_p_rhs(i) / dt;
         }
-        // delta_p_rhs /= -dt;
 
         // Eigen::ConjugateGradient<MatrixReplacement<dim>, Eigen::Lower | Eigen::Upper, Eigen::IdentityPreconditioner> cg;
         Eigen::ConjugateGradient<MatrixReplacement<dim>, Eigen::Lower|Eigen::Upper, PressurePreconditioner> cg;
@@ -467,6 +471,8 @@ int main()
         std::cout << "Pressure problem solved in " << cg.iterations() << " iterations." << std::endl;
 
         cg_zorri.Solve(delta_p_rhs, delta_p_zorri);
+        p_zorri += delta_p_zorri;
+        std::cout << "Pressure problem solved in " << cg_zorri.Iterations() << " iterations." << std::endl;
 
         // Correct velocity
         Operators<dim>::ApplyGradientOperator(box_divisions, cell_size, active_cells, delta_p, delta_p_grad);
@@ -477,27 +483,38 @@ int main()
         }
         std::cout << "Velocity update finished." << std::endl;
 
-        // // Output current step solution
-        // const static Eigen::IOFormat out_format(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
-        // std::ofstream v_file(results_path + "v_" + std::to_string(current_step) + ".txt");
-        // std::ofstream p_file(results_path + "p_" + std::to_string(current_step) + ".txt");
-        // if (v_file.is_open()) {
-        //     v_file << current_time << std::endl;
-        //     v_file << v.format(out_format);
-        //     v_file.close();
-        // }
-        // if (p_file.is_open()) {
-        //     p_file << current_time << std::endl;
-        //     p_file << p.format(out_format);
-        //     p_file.close();
-        // }
-        // std::cout << "Results output completed.\n" << std::endl;
+        // Output current step solution
+        const static Eigen::IOFormat out_format(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
+        std::ofstream v_file(results_path + "v_" + std::to_string(current_step) + ".txt");
+        std::ofstream p_file(results_path + "p_" + std::to_string(current_step) + ".txt");
+        if (v_file.is_open()) {
+            v_file << current_time << std::endl;
+            v_file << v.format(out_format);
+            v_file.close();
+        }
+        if (p_file.is_open()) {
+            p_file << current_time << std::endl;
+            p_file << p.format(out_format);
+            p_file.close();
+        }
+        std::cout << "Results output completed.\n" << std::endl;
 
         // Update variables for next time step
         acc = (v - v_n) / dt;
         v_n = v;
         ++current_step;
         current_time += dt;
+
+        std::cout << "p Eigen " << cg.iterations() << std::endl;
+        std::cout << p << std::endl;
+
+        std::cout << "p_zorri " << cg_zorri.Iterations() << std::endl;
+        std::cout << p_zorri << std::endl;
+
+        if (current_step == 2) {
+            break;
+        }
+
     }
 
     //std::cout << "v: \n" <<  v << std::endl;
