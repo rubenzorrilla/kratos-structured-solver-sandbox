@@ -18,6 +18,7 @@
 #include "mesh_utilities.hpp"
 #include "operators.hpp"
 #include "pressure_preconditioner.hpp"
+#include "pressure_conjugate_gradient_solver.hpp"
 #include "runge_kutta_utilities.hpp"
 #include "sbm_utilities.hpp"
 #include "time_utilities.hpp"
@@ -225,6 +226,7 @@ int main()
 
     // Deactivate the interior and intersected cells (SBM-like resolution)
     Eigen::Array<bool, Eigen::Dynamic, 1> active_cells(num_cells);
+    std::vector<bool> active_cells_vect(num_cells);
     if constexpr (dim == 2) {
         std::array<int,4> cell_node_ids;
         for (unsigned int i = 0; i < box_divisions[0]; ++i) {
@@ -232,6 +234,7 @@ int main()
                 CellUtilities::GetCellNodesGlobalIds(i, j, box_divisions, cell_node_ids);
                 const auto cell_fixity = fixity(cell_node_ids, Eigen::all);
                 active_cells(CellUtilities::GetCellGlobalId(i, j, box_divisions)) = !cell_fixity.all();
+                active_cells_vect[CellUtilities::GetCellGlobalId(i, j, box_divisions)] = !cell_fixity.all();
             }
         }
     } else {
@@ -344,6 +347,14 @@ int main()
     // Allocate auxiliary arrays for the velocity update
     Eigen::Matrix<double, Eigen::Dynamic, dim> delta_p_grad(num_nodes, dim);
 
+    const double abs_tol = 1.0e-6;
+    const double max_iter = 200;
+    PressureOperator<dim> pressure_operator(box_divisions, cell_size, active_cells_vect, lumped_mass_vector_inv_bcs);
+    PressureConjugateGradientSolver<dim> cg_zorri(abs_tol, max_iter, pressure_operator, fft_c);
+
+    Eigen::Array<double, Eigen::Dynamic, 1> delta_p_zorri(num_cells);
+    delta_p_zorri.setZero();
+
     // Time loop
     unsigned int tot_p_iters = 0;
     unsigned int current_step = 1;
@@ -454,6 +465,8 @@ int main()
         p += delta_p.array();
         tot_p_iters += cg.iterations();
         std::cout << "Pressure problem solved in " << cg.iterations() << " iterations." << std::endl;
+
+        cg_zorri.Solve(delta_p_rhs, delta_p_zorri);
 
         // Correct velocity
         Operators<dim>::ApplyGradientOperator(box_divisions, cell_size, active_cells, delta_p, delta_p_grad);
