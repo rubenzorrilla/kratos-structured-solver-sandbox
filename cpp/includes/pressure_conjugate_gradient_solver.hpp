@@ -44,7 +44,7 @@ public:
     }
 
     void Solve(
-        const VectorType& rRHS,
+        const VectorType& rB,
         VectorType& rX)
     {
         // Initialize data
@@ -53,8 +53,8 @@ public:
         // Compute initial residual
         VectorType r_k(mProblemSize);
         VectorType aux(mProblemSize);
-        mrPressureOperator.Apply(rX, aux);
-        r_k = rRHS - aux;
+        mrPressureOperator.Apply(rX, aux); //TODO: We can do a mult and add to make this more efficient
+        r_k = rB - aux;
 
         // Check initial residual
         const double res_norm = ComputeResidualNorm(r_k);
@@ -66,24 +66,21 @@ public:
         VectorType d_k(mProblemSize); // Current iteration direction
         VectorType d_k_1(mProblemSize); // Next iteration direction
         VectorType r_k_1(mProblemSize); // Next iteration residual
-        VectorType M_r_k(mProblemSize); // Current iteration preconditioner residual projection
-        VectorType M_r_k_1(mProblemSize); // Next iteration preconditioner residual projection
+        VectorType z_k(mProblemSize); // Current iteration preconditioner residual projection
+        VectorType z_k_1(mProblemSize); // Next iteration preconditioner residual projection
 
-        ApplyPreconditioner(r_k, M_r_k);
-        d_k = M_r_k;
+        ApplyPreconditioner(r_k, z_k);
+        d_k = z_k;
         // d_k = r_k; // Identity preconditioner
 
-        std::cout << "r_0 = d_0 = \n" << r_k << std::endl;
-        std::cout << "M_r_k = d_0 = \n" << M_r_k << std::endl;
-
         for (mIters = 1; mIters <= mMaxIter; ++mIters) {
-
+            // Compute current iteration residual and solution
             double aux_1 = 0.0;
             double aux_2 = 0.0;
             mrPressureOperator.Apply(d_k, aux);
             for (unsigned int i = 0; i < mProblemSize; ++i) {
                 // aux_1 += r_k(i) * r_k(i); // Identity preconditioner
-                aux_1 += r_k(i) * M_r_k(i);
+                aux_1 += r_k(i) * z_k(i);
                 aux_2 += d_k(i) * aux(i);
             }
             const double alpha_k = aux_1 / aux_2;
@@ -93,34 +90,36 @@ public:
                 r_k_1(i) = r_k(i) - alpha_k * aux(i);
             }
 
+            // Check convergence
+            double res_norm;
+            double res_inc_norm;
+            std::tie(res_norm, res_inc_norm) = ComputeResidualNorms(r_k, r_k_1);
+            // std::cout << "Iteration " << mIters << " Res. norm " << res_norm << " Res. inc. norm " << res_inc_norm << std::endl;
+            if (res_norm < mAbsTol || res_inc_norm / res_norm < mRelTol) {
+                return;
+            }
+
+            // Update search direction
             double aux_3 = 0.0;
             double aux_4 = 0.0;
-            ApplyPreconditioner(r_k_1, M_r_k_1);
+            ApplyPreconditioner(r_k_1, z_k_1);
             for (unsigned int i = 0; i < mProblemSize; ++i) {
-                aux_3 += r_k_1(i) * M_r_k_1(i);
-                aux_4 += r_k(i) * M_r_k(i);
+                aux_3 += r_k_1(i) * z_k_1(i);
+                aux_4 += r_k(i) * z_k(i);
                 // aux_3 += r_k_1(i) * r_k_1(i); // Identity preconditioner
                 // aux_4 += r_k(i) * r_k(i); // Identity preconditioner
             }
             const double beta_k = aux_3 / aux_4;
 
             for (unsigned int i = 0; i < mProblemSize; ++i) {
-                d_k_1(i) = M_r_k_1(i) + beta_k * d_k(i);
-                // d_k_1(i) = r_k_1(i) + beta * d_k(i); // Identity preconditioner
-            }
-
-            // Check convergence
-            double res_norm;
-            double res_inc_norm;
-            std::tie(res_norm, res_inc_norm) = ComputeResidualNorms(r_k, r_k_1);
-            if (res_norm < mAbsTol || res_inc_norm / res_norm < mRelTol) {
-                return;
+                d_k_1(i) = z_k_1(i) + beta_k * d_k(i);
+                // d_k_1(i) = r_k_1(i) + beta_k * d_k(i); // Identity preconditioner
             }
 
             // Update variables for next step
             d_k = d_k_1;
             r_k = r_k_1;
-            M_r_k = M_r_k_1;
+            z_k = z_k_1;
         }
     }
 

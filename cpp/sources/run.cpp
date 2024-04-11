@@ -37,7 +37,7 @@ int main()
     // Input mesh data
     const std::array<double, dim> box_size({1.0, 1.0});
     // const std::array<int, dim> box_divisions({150, 30});
-    const std::array<int, dim> box_divisions({4, 4});
+    const std::array<int, dim> box_divisions({3, 3});
 
     // Compute mesh data
     auto mesh_data = MeshUtilities<dim>::CalculateMeshData(box_divisions);
@@ -129,7 +129,6 @@ int main()
 
     // Create mesh dataset
     Eigen::ArrayXd p = Eigen::VectorXd::Zero(num_cells);
-    Eigen::ArrayXd p_zorri = Eigen::VectorXd::Zero(num_cells);
     Eigen::ArrayXXd f = Eigen::MatrixXd::Zero(num_nodes, dim);
     Eigen::ArrayXXd v = Eigen::MatrixXd::Zero(num_nodes, dim);
     Eigen::ArrayXXd v_n = Eigen::MatrixXd::Zero(num_nodes, dim);
@@ -147,12 +146,14 @@ int main()
         if (r_coords[0] < tol) {
             fixity(i_node, 0) = true; // x-velocity
             fixity(i_node, 1) = true; // y-velocity
-            const double y_coord = r_coords(1);
-            v(i_node, 0) = 6.0*y_coord*(1.0-y_coord);
-            v_n(i_node, 0) = 6.0*y_coord*(1.0-y_coord);
 
-            // v(i_node, 0) = 1.0;
-            // v_n(i_node, 0) = 1.0;
+            const double y_coord = r_coords(1);
+
+            // v(i_node, 0) = 6.0*y_coord*(1.0-y_coord);
+            // v_n(i_node, 0) = 6.0*y_coord*(1.0-y_coord);
+
+            v(i_node, 0) = 1.0;
+            v_n(i_node, 0) = 1.0;
 
             // if (y_coord > 0.5) {
             //     v(i_node, 0) = y_coord - 0.5;
@@ -184,6 +185,13 @@ int main()
         // distance(i_node) = dist < cyl_rad ? - dist : dist;
         distance(i_node) = 1.0;
         // distance(i_node) = r_coords[1] - 0.5;
+    }
+
+    std::ofstream distance_file(results_path + "distance.txt");
+    if (distance_file.is_open()) {
+        for (unsigned int i = 0; i < num_nodes; ++i) {
+            distance_file << distance(i) << std::endl;
+        }
     }
 
     // Define the surrogate boundary
@@ -344,7 +352,9 @@ int main()
     }
 
     // Allocate auxiliary arrays for the pressure problem
-    Eigen::VectorXd delta_p(num_cells);
+    // Eigen::VectorXd delta_p(num_cells);
+    Eigen::Array<double, Eigen::Dynamic, 1> delta_p(num_cells);
+    delta_p.setZero();
     Eigen::VectorXd delta_p_rhs(num_cells);
     MatrixReplacement<dim> matrix_replacement(box_divisions, cell_size, active_cells, lumped_mass_vector_inv_bcs);
 
@@ -357,8 +367,6 @@ int main()
     PressureOperator<dim> pressure_operator(box_divisions, cell_size, active_cells_vect, lumped_mass_vector_inv_bcs);
     PressureConjugateGradientSolver<dim> cg_zorri(abs_tol, rel_tol, max_iter, pressure_operator, fft_c);
 
-    Eigen::Array<double, Eigen::Dynamic, 1> delta_p_zorri(num_cells);
-    delta_p_zorri.setZero();
 
     // Time loop
     unsigned int tot_p_iters = 0;
@@ -435,8 +443,6 @@ int main()
                         }
                     }
                 }
-
-                break;
             } else {
                 throw std::logic_error("3D case not implemented yet");
             }
@@ -462,16 +468,17 @@ int main()
         }
 
         // Eigen::ConjugateGradient<MatrixReplacement<dim>, Eigen::Lower | Eigen::Upper, Eigen::IdentityPreconditioner> cg;
-        Eigen::ConjugateGradient<MatrixReplacement<dim>, Eigen::Lower|Eigen::Upper, PressurePreconditioner> cg;
-        cg.preconditioner() = pressure_precond;
-        cg.compute(matrix_replacement);
-        delta_p = cg.solve(delta_p_rhs);
-        p += delta_p.array();
-        tot_p_iters += cg.iterations();
-        std::cout << "Pressure problem solved in " << cg.iterations() << " iterations." << std::endl;
+        // // Eigen::ConjugateGradient<MatrixReplacement<dim>, Eigen::Lower|Eigen::Upper, PressurePreconditioner> cg;
+        // // cg.preconditioner() = pressure_precond;
+        // cg.compute(matrix_replacement);
+        // delta_p = cg.solve(delta_p_rhs);
+        // p += delta_p.array();
+        // tot_p_iters += cg.iterations();
+        // std::cout << "Pressure problem solved in " << cg.iterations() << " iterations." << std::endl;
 
-        cg_zorri.Solve(delta_p_rhs, delta_p_zorri);
-        p_zorri += delta_p_zorri;
+        cg_zorri.Solve(delta_p_rhs, delta_p);
+        p += delta_p;
+        tot_p_iters += cg_zorri.Iterations();
         std::cout << "Pressure problem solved in " << cg_zorri.Iterations() << " iterations." << std::endl;
 
         // Correct velocity
@@ -504,21 +511,10 @@ int main()
         v_n = v;
         ++current_step;
         current_time += dt;
-
-        std::cout << "p Eigen " << cg.iterations() << std::endl;
-        std::cout << p << std::endl;
-
-        std::cout << "p_zorri " << cg_zorri.Iterations() << std::endl;
-        std::cout << p_zorri << std::endl;
-
-        if (current_step == 2) {
-            break;
-        }
-
     }
 
-    //std::cout << "v: \n" <<  v << std::endl;
-    //std::cout << "p: \n" << p << std::endl;
+    std::cout << "v: \n" <<  v << std::endl;
+    std::cout << "p: \n" << p << std::endl;
 
     // Print final data
     std::cout << "TOTAL PRESSURE ITERATIONS: " << tot_p_iters << std::endl;
