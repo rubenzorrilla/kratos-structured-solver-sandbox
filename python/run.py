@@ -548,13 +548,6 @@ while current_time < end_time:
         else:
             raise NotImplementedError
 
-        err
-
-    print(rk_res[0])
-    print(rk_res[1])
-    print(rk_res[2])
-    print(rk_res[3])
-
     # Solve Runge-Kutta step
     v[free_dofs] = 0.0
     for rk_step in range(rk_num_steps):
@@ -566,10 +559,6 @@ while current_time < end_time:
     # Solve pressure update
     delta_p_rhs = ApplyDivergenceOperator(v)
     delta_p_rhs /= -dt
-
-    print(v)
-    print(delta_p_rhs)
-    err
 
     p_iters = 0
     def nonlocal_iterate(arr):
