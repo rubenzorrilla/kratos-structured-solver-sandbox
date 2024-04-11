@@ -365,7 +365,7 @@ int main()
     const double rel_tol = 1.0e-15;
     const double max_iter = 200;
     PressureOperator<dim> pressure_operator(box_divisions, cell_size, active_cells_vect, lumped_mass_vector_inv_bcs);
-    PressureConjugateGradientSolver<dim> cg_zorri(abs_tol, rel_tol, max_iter, pressure_operator, fft_c);
+    PressureConjugateGradientSolver<dim> cg(abs_tol, rel_tol, max_iter, pressure_operator, fft_c);
 
 
     // Time loop
@@ -476,10 +476,10 @@ int main()
         // tot_p_iters += cg.iterations();
         // std::cout << "Pressure problem solved in " << cg.iterations() << " iterations." << std::endl;
 
-        cg_zorri.Solve(delta_p_rhs, delta_p);
+        cg.Solve(delta_p_rhs, delta_p);
         p += delta_p;
-        tot_p_iters += cg_zorri.Iterations();
-        std::cout << "Pressure problem solved in " << cg_zorri.Iterations() << " iterations." << std::endl;
+        tot_p_iters += cg.Iterations();
+        std::cout << "Pressure problem solved in " << cg.Iterations() << " iterations." << std::endl;
 
         // Correct velocity
         Operators<dim>::ApplyGradientOperator(box_divisions, cell_size, active_cells, delta_p, delta_p_grad);
