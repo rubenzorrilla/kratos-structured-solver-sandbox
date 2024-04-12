@@ -18,17 +18,18 @@ void SbmUtilities<2>::FindSurrogateBoundaryNodes(
     rSurrogateNodes.setZero();
 
     std::array<int,4> cell_node_ids;
-    for (unsigned int i = 0; i < rBoxDivisions[0]; ++i) {
-        for (unsigned int j = 0; j < rBoxDivisions[1]; ++j) {
+    for (unsigned int i = 0; i < rBoxDivisions[1]; ++i) {
+        for (unsigned int j = 0; j < rBoxDivisions[0]; ++j) {
             CellUtilities::GetCellNodesGlobalIds(i, j, rBoxDivisions, cell_node_ids);
             std::vector<unsigned int> pos_nodes;
             std::vector<unsigned int> neg_nodes;
             const auto cell_distance = rDistance(cell_node_ids, 0);
             for (unsigned int i_node = 0; i_node < 4; ++i_node) {
-                if (cell_distance[i_node] < 0.0) {
-                    neg_nodes.push_back(cell_node_ids[i_node]);
+                const unsigned int node_id = cell_node_ids[i_node];
+                if (rDistance(node_id) < 0.0) {
+                    neg_nodes.push_back(node_id);
                 } else {
-                    pos_nodes.push_back(cell_node_ids[i_node]);
+                    pos_nodes.push_back(node_id);
                 }
             }
             if (pos_nodes.size() != 0 && neg_nodes.size() != 0) {
@@ -51,8 +52,8 @@ void SbmUtilities<3>::FindSurrogateBoundaryNodes(
     rSurrogateNodes.setZero();
 
     std::array<int,8> cell_node_ids;
-    for (unsigned int i = 0; i < rBoxDivisions[0]; ++i) {
-        for (unsigned int j = 0; j < rBoxDivisions[1]; ++j) {
+    for (unsigned int i = 0; i < rBoxDivisions[1]; ++i) {
+        for (unsigned int j = 0; j < rBoxDivisions[0]; ++j) {
             for (unsigned int k = 0; k < rBoxDivisions[2]; ++k) {
                 CellUtilities::GetCellNodesGlobalIds(i, j, k, rBoxDivisions, cell_node_ids);
                 std::vector<unsigned int> pos_nodes;
@@ -87,8 +88,8 @@ void SbmUtilities<2>::FindSurrogateBoundaryCells(
     rSurrogateCells.setZero();
 
     std::array<int,4> cell_node_ids;
-    for (unsigned int i = 0; i < rBoxDivisions[0]; ++i) {
-        for (unsigned int j = 0; j < rBoxDivisions[1]; ++j) {
+    for (unsigned int i = 0; i < rBoxDivisions[1]; ++i) {
+        for (unsigned int j = 0; j < rBoxDivisions[0]; ++j) {
             CellUtilities::GetCellNodesGlobalIds(i, j, rBoxDivisions, cell_node_ids);
             const auto& r_cell_node_dist = rDistance(cell_node_ids);
             if (std::none_of(r_cell_node_dist.cbegin(), r_cell_node_dist.cend(), [](const double x){return x < 0.0;})) {
@@ -117,8 +118,8 @@ void SbmUtilities<3>::FindSurrogateBoundaryCells(
     rSurrogateCells.setZero();
 
     std::array<int,8> cell_node_ids;
-    for (unsigned int i = 0; i < rBoxDivisions[0]; ++i) {
-        for (unsigned int j = 0; j < rBoxDivisions[1]; ++j) {
+    for (unsigned int i = 0; i < rBoxDivisions[1]; ++i) {
+        for (unsigned int j = 0; j < rBoxDivisions[0]; ++j) {
             for (unsigned int k = 0; k < rBoxDivisions[2]; ++k) {
                 CellUtilities::GetCellNodesGlobalIds(i, j, k, rBoxDivisions, cell_node_ids);
                 const auto& r_cell_node_dist = rDistance(cell_node_ids);
@@ -163,8 +164,8 @@ void SbmUtilities<2>::UpdateSurrogateBoundaryDirichletValues(
     Eigen::Matrix2d weighted_grad_v;
     std::array<int, 4> cell_node_ids;
     Eigen::Matrix<double, 4, 2> cell_v;
-    for (unsigned int i = 0; i < rBoxDivisions[0]; ++i) {
-        for (unsigned int j = 0; j < rBoxDivisions[1]; ++j) {
+    for (unsigned int i = 0; i < rBoxDivisions[1]; ++i) {
+        for (unsigned int j = 0; j < rBoxDivisions[0]; ++j) {
             // Check if current cell is attached to the surrogate boundary
             if (rSurrogateCells(CellUtilities::GetCellGlobalId(i, j, rBoxDivisions))) {
                 // Get current surrogate cell nodes
@@ -218,8 +219,8 @@ void SbmUtilities<3>::UpdateSurrogateBoundaryDirichletValues(
     Eigen::Matrix3d weighted_grad_v;
     std::array<int, 8> cell_node_ids;
     Eigen::Matrix<double, 8, 3> cell_v;
-    for (unsigned int i = 0; i < rBoxDivisions[0]; ++i) {
-        for (unsigned int j = 0; j < rBoxDivisions[1]; ++j) {
+    for (unsigned int i = 0; i < rBoxDivisions[1]; ++i) {
+        for (unsigned int j = 0; j < rBoxDivisions[0]; ++j) {
             for (unsigned int k = 0; k < rBoxDivisions[2]; ++k) {
                 // Check if current cell is attached to the surrogate boundary
                 if (rSurrogateCells(CellUtilities::GetCellGlobalId(i, j, k, rBoxDivisions))) {

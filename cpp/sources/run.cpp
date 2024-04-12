@@ -35,9 +35,9 @@ int main()
     const double rho = 1.0e0;
 
     // Input mesh data
-    const std::array<double, dim> box_size({1.0, 1.0});
-    // const std::array<int, dim> box_divisions({150, 30});
-    const std::array<int, dim> box_divisions({3, 3});
+    const std::array<double, dim> box_size({5.0, 1.0});
+    const std::array<int, dim> box_divisions({150, 30});
+    // const std::array<int, dim> box_divisions({3, 3});
 
     // Compute mesh data
     auto mesh_data = MeshUtilities<dim>::CalculateMeshData(box_divisions);
@@ -107,16 +107,16 @@ int main()
     if (connectivities_file.is_open()) {
         if constexpr (dim == 2) {
             std::array<int,4> cell_node_ids;
-            for (unsigned int i = 0; i < box_divisions[0]; ++i) {
-                for (unsigned int j = 0; j < box_divisions[1]; ++j) {
+            for (unsigned int i = 0; i < box_divisions[1]; ++i) {
+                for (unsigned int j = 0; j < box_divisions[0]; ++j) {
                     CellUtilities::GetCellNodesGlobalIds(i, j, box_divisions, cell_node_ids);
                     connectivities_file << cell_node_ids[0] << " " << cell_node_ids[1] << " " << cell_node_ids[2] << " " << cell_node_ids[3] << std::endl;
                 }
             }
         } else {
             // std::array<int,8> cell_node_ids;
-            // for (unsigned int i = 0; i < box_divisions[0]; ++i) {
-            //     for (unsigned int j = 0; j < box_divisions[1]; ++j) {
+            // for (unsigned int i = 0; i < box_divisions[1]; ++i) {
+            //     for (unsigned int j = 0; j < box_divisions[0]; ++j) {
             //         for (unsigned int k = 0; k < box_divisions[2]; ++k) {
             //             CellUtilities::GetCellNodesGlobalIds(i, j, k, box_divisions, cell_node_ids);
             //             connectivities_file << cell_node_ids[0] << " " << cell_node_ids[1] << " " << cell_node_ids[2] << " " << cell_node_ids[3] << cell_node_ids[4] << " " << cell_node_ids[5] << " " << cell_node_ids[6] << " " << cell_node_ids[7] << std::endl;
@@ -149,11 +149,11 @@ int main()
 
             const double y_coord = r_coords(1);
 
-            // v(i_node, 0) = 6.0*y_coord*(1.0-y_coord);
-            // v_n(i_node, 0) = 6.0*y_coord*(1.0-y_coord);
+            v(i_node, 0) = 6.0*y_coord*(1.0-y_coord);
+            v_n(i_node, 0) = 6.0*y_coord*(1.0-y_coord);
 
-            v(i_node, 0) = 1.0;
-            v_n(i_node, 0) = 1.0;
+            // v(i_node, 0) = 1.0;
+            // v_n(i_node, 0) = 1.0;
 
             // if (y_coord > 0.5) {
             //     v(i_node, 0) = y_coord - 0.5;
@@ -181,9 +181,9 @@ int main()
     Eigen::Array<double, Eigen::Dynamic, 1> distance(num_nodes);
     for (unsigned int i_node = 0; i_node < num_nodes; ++i_node) {
         const auto& r_coords = nodal_coords.row(i_node);
-        // const double dist = (r_coords - cyl_orig).matrix().norm();
-        // distance(i_node) = dist < cyl_rad ? - dist : dist;
-        distance(i_node) = 1.0;
+        const double dist = (r_coords - cyl_orig).matrix().norm();
+        distance(i_node) = dist < cyl_rad ? - dist : dist;
+        // distance(i_node) = 1.0;
         // distance(i_node) = r_coords[1] - 0.5;
     }
 
@@ -195,14 +195,17 @@ int main()
     }
 
     // Define the surrogate boundary
+    std::cout << "\n### SURROGATE BOUNDARY DEFINITION ###" << std::endl;
     Eigen::Array<double, Eigen::Dynamic, dim> v_surrogate(num_nodes, dim);
     v_surrogate.setZero();
 
     Eigen::Array<bool, Eigen::Dynamic, 1> surrogate_nodes(num_nodes);
     SbmUtilities<dim>::FindSurrogateBoundaryNodes(box_divisions, distance, surrogate_nodes);
+    std::cout << "Surrogate boundary nodes found." << std::endl;
 
     Eigen::Array<bool, Eigen::Dynamic, 1> surrogate_cells(num_cells);
     SbmUtilities<dim>::FindSurrogateBoundaryCells(box_divisions, distance, surrogate_nodes, surrogate_cells);
+    std::cout << "Surrogate boundary cells found." << std::endl;
 
     // Calculate the distance vectors in the surrogate boundary nodes
     Eigen::Vector<double, dim> aux_dir;
@@ -210,14 +213,14 @@ int main()
     for (unsigned int i_node = 0; i_node < num_nodes; ++i_node) {
         if (surrogate_nodes(i_node)) {
             const auto& r_coords = nodal_coords.row(i_node);
-            // aux_dir = cyl_orig - r_coords;
-            // aux_dir /= aux_dir.norm();
-            // distance_vects.row(i_node) = distance[i_node] * aux_dir;
-            // distance_vects.row(i_node) = distance[i_node] * aux_dir;
-            distance_vects(i_node, 0) = 0.0;
-            distance_vects(i_node, 1) = distance[i_node];
+            aux_dir = cyl_orig - r_coords;
+            aux_dir /= aux_dir.norm();
+            distance_vects.row(i_node) = distance[i_node] * aux_dir;
+            // distance_vects(i_node, 0) = 0.0;
+            // distance_vects(i_node, 1) = distance[i_node];
         }
     }
+    std::cout << "Surrogate boundary nodes distance vectors computed." << std::endl;
 
     // Apply fixity in the interior nodes
     for (unsigned int i_node = 0; i_node < num_nodes; ++i_node) {
@@ -238,8 +241,8 @@ int main()
     std::vector<bool> active_cells_vect(num_cells);
     if constexpr (dim == 2) {
         std::array<int,4> cell_node_ids;
-        for (unsigned int i = 0; i < box_divisions[0]; ++i) {
-            for (unsigned int j = 0; j < box_divisions[1]; ++j) {
+        for (unsigned int i = 0; i < box_divisions[1]; ++i) {
+            for (unsigned int j = 0; j < box_divisions[0]; ++j) {
                 CellUtilities::GetCellNodesGlobalIds(i, j, box_divisions, cell_node_ids);
                 const auto cell_fixity = fixity(cell_node_ids, Eigen::all);
                 active_cells(CellUtilities::GetCellGlobalId(i, j, box_divisions)) = !cell_fixity.all();
@@ -330,6 +333,7 @@ int main()
         fft_c = (fft_y.array() / fft_x.array()).real(); // Take the real part only (imaginary one is zero)
         fft_c(0) = 1.0; // Remove the first coefficient as this is associated to the solution average
         pressure_precond.setFFT(fft_c); // Instantiate the pressure preconditioner
+        std::cout << "Pressure preconditioner set." << std::endl;
     } else {
         std::cout << "There is no cell with all the DOFs free. No pressure preconditioner can be set." << std::endl;
     }
@@ -418,8 +422,8 @@ int main()
                 Eigen::Array<double, 4, 2> cell_f;
                 Eigen::Array<double, 4, 2> cell_acc;
                 Eigen::Array<double, 8, 1> cell_res;
-                for (unsigned int i = 0; i < box_divisions[0]; ++i) {
-                    for (unsigned int j = 0; j < box_divisions[1]; ++j) {
+                for (unsigned int i = 0; i < box_divisions[1]; ++i) {
+                    for (unsigned int j = 0; j < box_divisions[0]; ++j) {
                         const unsigned int i_cell = CellUtilities::GetCellGlobalId(i, j, box_divisions);
                         if (active_cells(i_cell)) {
                             // Get current cell data
@@ -512,9 +516,6 @@ int main()
         ++current_step;
         current_time += dt;
     }
-
-    std::cout << "v: \n" <<  v << std::endl;
-    std::cout << "p: \n" << p << std::endl;
 
     // Print final data
     std::cout << "TOTAL PRESSURE ITERATIONS: " << tot_p_iters << std::endl;

@@ -26,8 +26,8 @@ void Operators<2>::ApplyGradientOperator(
 
     // Apply the gradient operator onto a vector
     std::array<int,4> cell_node_ids;
-    for (unsigned int i = 0; i < rBoxDivisions[0]; ++i) {
-        for (unsigned int j = 0; j < rBoxDivisions[1]; ++j) {
+    for (unsigned int i = 0; i < rBoxDivisions[1]; ++i) {
+        for (unsigned int j = 0; j < rBoxDivisions[0]; ++j) {
             const unsigned int cell_id = CellUtilities::GetCellGlobalId(i, j, rBoxDivisions);
             if (rActiveCells[cell_id]) {
                 const double x = rX(cell_id);
@@ -65,8 +65,8 @@ void Operators<3>::ApplyGradientOperator(
 
     // Apply the gradient operator onto a vector
     std::array<int,8> cell_node_ids;
-    for (unsigned int i = 0; i < rBoxDivisions[0]; ++i) {
-        for (unsigned int j = 0; j < rBoxDivisions[1]; ++j) {
+    for (unsigned int i = 0; i < rBoxDivisions[1]; ++i) {
+        for (unsigned int j = 0; j < rBoxDivisions[0]; ++j) {
             for (unsigned int k = 0; k < rBoxDivisions[2]; ++k) {
                 const unsigned int cell_id = CellUtilities::GetCellGlobalId(i, j, k, rBoxDivisions);
                 if (rActiveCells[cell_id]) {
@@ -107,8 +107,8 @@ void Operators<2>::ApplyGradientOperator(
 
     // Apply the gradient operator onto a vector
     std::array<int,4> cell_node_ids;
-    for (unsigned int i = 0; i < rBoxDivisions[0]; ++i) {
-        for (unsigned int j = 0; j < rBoxDivisions[1]; ++j) {
+    for (unsigned int i = 0; i < rBoxDivisions[1]; ++i) {
+        for (unsigned int j = 0; j < rBoxDivisions[0]; ++j) {
             const unsigned int cell_id = CellUtilities::GetCellGlobalId(i, j, rBoxDivisions);
             if (rActiveCells(cell_id)) {
                 const double x = rX(cell_id);
@@ -146,8 +146,8 @@ void Operators<3>::ApplyGradientOperator(
 
     // Apply the gradient operator onto a vector
     std::array<int,8> cell_node_ids;
-    for (unsigned int i = 0; i < rBoxDivisions[0]; ++i) {
-        for (unsigned int j = 0; j < rBoxDivisions[1]; ++j) {
+    for (unsigned int i = 0; i < rBoxDivisions[1]; ++i) {
+        for (unsigned int j = 0; j < rBoxDivisions[0]; ++j) {
             for (unsigned int k = 0; k < rBoxDivisions[2]; ++k) {
                 const unsigned int cell_id = CellUtilities::GetCellGlobalId(i, j, k, rBoxDivisions);
                 if (rActiveCells(cell_id)) {
@@ -188,8 +188,8 @@ void Operators<2>::ApplyDivergenceOperator(
 
     // Apply the gradient operator onto a vector
     std::array<int,4> cell_node_ids;
-    for (unsigned int i = 0; i < rBoxDivisions[0]; ++i) {
-        for (unsigned int j = 0; j < rBoxDivisions[1]; ++j) {
+    for (unsigned int i = 0; i < rBoxDivisions[1]; ++i) {
+        for (unsigned int j = 0; j < rBoxDivisions[0]; ++j) {
             const unsigned int cell_id = CellUtilities::GetCellGlobalId(i, j, rBoxDivisions);
             if (rActiveCells[cell_id]) {
                 CellUtilities::GetCellNodesGlobalIds(i, j, rBoxDivisions, cell_node_ids);
@@ -223,8 +223,8 @@ void Operators<3>::ApplyDivergenceOperator(
 
     // Apply the gradient operator onto a vector
     std::array<int,8> cell_node_ids;
-    for (unsigned int i = 0; i < rBoxDivisions[0]; ++i) {
-        for (unsigned int j = 0; j < rBoxDivisions[1]; ++j) {
+    for (unsigned int i = 0; i < rBoxDivisions[1]; ++i) {
+        for (unsigned int j = 0; j < rBoxDivisions[0]; ++j) {
             for (unsigned int k = 0; k < rBoxDivisions[2]; ++k) {
                 const unsigned int cell_id = CellUtilities::GetCellGlobalId(i, j, k, rBoxDivisions);
                 if (rActiveCells[cell_id]) {
@@ -260,8 +260,8 @@ void Operators<2>::ApplyDivergenceOperator(
 
     // Apply the gradient operator onto a vector
     std::array<int,4> cell_node_ids;
-    for (unsigned int i = 0; i < rBoxDivisions[0]; ++i) {
-        for (unsigned int j = 0; j < rBoxDivisions[1]; ++j) {
+    for (unsigned int i = 0; i < rBoxDivisions[1]; ++i) {
+        for (unsigned int j = 0; j < rBoxDivisions[0]; ++j) {
             const unsigned int cell_id = CellUtilities::GetCellGlobalId(i, j, rBoxDivisions);
             if (rActiveCells(cell_id)) {
                 CellUtilities::GetCellNodesGlobalIds(i, j, rBoxDivisions, cell_node_ids);
@@ -295,8 +295,8 @@ void Operators<3>::ApplyDivergenceOperator(
 
     // Apply the gradient operator onto a vector
     std::array<int,8> cell_node_ids;
-    for (unsigned int i = 0; i < rBoxDivisions[0]; ++i) {
-        for (unsigned int j = 0; j < rBoxDivisions[1]; ++j) {
+    for (unsigned int i = 0; i < rBoxDivisions[1]; ++i) {
+        for (unsigned int j = 0; j < rBoxDivisions[0]; ++j) {
             for (unsigned int k = 0; k < rBoxDivisions[2]; ++k) {
                 const unsigned int cell_id = CellUtilities::GetCellGlobalId(i, j, k, rBoxDivisions);
                 if (rActiveCells(cell_id)) {

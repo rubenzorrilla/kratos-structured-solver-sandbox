@@ -109,8 +109,8 @@ void MeshUtilities<2>::CalculateLumpedMassVector(
     }
     rLumpedMassVector.setZero();
     std::array<int, 4> cell_node_ids;
-    for (unsigned int i = 0; i < rBoxDivisions[0]; ++i) {
-        for (unsigned int j = 0; j < rBoxDivisions[1]; ++j) {
+    for (unsigned int i = 0; i < rBoxDivisions[1]; ++i) {
+        for (unsigned int j = 0; j < rBoxDivisions[0]; ++j) {
             if (rActiveCells(CellUtilities::GetCellGlobalId(i, j, rBoxDivisions))) {
                 CellUtilities::GetCellNodesGlobalIds(i, j, rBoxDivisions, cell_node_ids);
                 rLumpedMassVector(cell_node_ids, Eigen::all).array() += MassFactor;
@@ -132,8 +132,8 @@ void MeshUtilities<3>::CalculateLumpedMassVector(
     }
     rLumpedMassVector.setZero();
     std::array<int, 8> cell_node_ids;
-    for (unsigned int i = 0; i < rBoxDivisions[0]; ++i) {
-        for (unsigned int j = 0; j < rBoxDivisions[1]; ++j) {
+    for (unsigned int i = 0; i < rBoxDivisions[1]; ++i) {
+        for (unsigned int j = 0; j < rBoxDivisions[0]; ++j) {
             for (unsigned int k = 0; k < rBoxDivisions[2]; ++k) {
                 if (rActiveCells(CellUtilities::GetCellGlobalId(i, j, k, rBoxDivisions))) {
                     CellUtilities::GetCellNodesGlobalIds(i, j, k, rBoxDivisions, cell_node_ids);
@@ -150,8 +150,8 @@ std::tuple<bool, unsigned int> MeshUtilities<2>::FindFirstFreeCellId(
     const Eigen::Array<bool, Eigen::Dynamic, 2>& rFixity)
 {
     std::array<int, 4> cell_node_ids;
-    for (unsigned int i = 0; i < rBoxDivisions[0]; ++i) {
-        for (unsigned int j = 0; j < rBoxDivisions[1]; ++j) {
+    for (unsigned int i = 0; i < rBoxDivisions[1]; ++i) {
+        for (unsigned int j = 0; j < rBoxDivisions[0]; ++j) {
             CellUtilities::GetCellNodesGlobalIds(i, j, rBoxDivisions, cell_node_ids);
             const auto cell_fixity = rFixity(cell_node_ids, Eigen::all);
             if (!cell_fixity.any()) {
@@ -169,8 +169,8 @@ std::tuple<bool, unsigned int> MeshUtilities<3>::FindFirstFreeCellId(
     const Eigen::Array<bool, Eigen::Dynamic, 3>& rFixity)
 {
     std::array<int, 8> cell_node_ids;
-    for (unsigned int i = 0; i < rBoxDivisions[0]; ++i) {
-        for (unsigned int j = 0; j < rBoxDivisions[1]; ++j) {
+    for (unsigned int i = 0; i < rBoxDivisions[1]; ++i) {
+        for (unsigned int j = 0; j < rBoxDivisions[0]; ++j) {
             for (unsigned int k = 0; k < rBoxDivisions[2]; ++k) {
                 CellUtilities::GetCellNodesGlobalIds(i, j, k, rBoxDivisions, cell_node_ids);
                 const auto cell_fixity = rFixity(cell_node_ids, Eigen::all);
