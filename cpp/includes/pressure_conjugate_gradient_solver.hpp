@@ -43,12 +43,18 @@ public:
         return mIters;
     }
 
-    void Solve(
+    const unsigned int IsConverged() const
+    {
+        return mIsConverged;
+    }
+
+    bool Solve(
         const VectorType& rB,
         VectorType& rX)
     {
         // Initialize data
         mIters = 0;
+        mIsConverged = false;
 
         // Compute initial residual
         VectorType r_k(mProblemSize);
@@ -59,7 +65,10 @@ public:
         // Check initial residual
         const double res_norm = ComputeResidualNorm(r_k);
         if (res_norm < mAbsTol) {
-            return;
+            mIsConverged = true;
+            return mIsConverged;
+        } else {
+            mIters = 1;
         }
 
         // Allocate required arrays
@@ -73,7 +82,7 @@ public:
         d_k = z_k;
         // d_k = r_k; // Identity preconditioner
 
-        for (mIters = 1; mIters <= mMaxIter; ++mIters) {
+        while (!mIsConverged) {
             // Compute current iteration residual and solution
             double aux_1 = 0.0;
             double aux_2 = 0.0;
@@ -96,7 +105,13 @@ public:
             std::tie(res_norm, res_inc_norm) = ComputeResidualNorms(r_k, r_k_1);
             // std::cout << "Iteration " << mIters << " Res. norm " << res_norm << " Res. inc. norm " << res_inc_norm << std::endl;
             if (res_norm < mAbsTol || res_inc_norm / res_norm < mRelTol) {
-                return;
+                mIsConverged = true;
+                break;
+            } else {
+                if (mIters == mMaxIter) {
+                    std::cout << "Maximum iterations reached!" << std::endl;
+                    break;
+                }
             }
 
             // Update search direction
@@ -117,17 +132,23 @@ public:
             }
 
             // Update variables for next step
+            mIters++;
             d_k = d_k_1;
             r_k = r_k_1;
             z_k = z_k_1;
         }
+
+        return mIsConverged;
     }
 
 private:
 
+
     double mAbsTol;
 
     double mRelTol;
+
+    bool mIsConverged;
 
     unsigned int mIters;
 

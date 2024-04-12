@@ -27,7 +27,7 @@ int main()
 {
     // Problem data
     static constexpr int dim = 2;
-    const double end_time = 1.0e1;
+    const double end_time = 4.5e1;
     const double init_time = 0.0;
 
     // Material data
@@ -365,12 +365,14 @@ int main()
     // Allocate auxiliary arrays for the velocity update
     Eigen::Matrix<double, Eigen::Dynamic, dim> delta_p_grad(num_nodes, dim);
 
-    const double abs_tol = 1.0e-15;
-    const double rel_tol = 1.0e-15;
+    std::cout << "\n### PRESSURE SOLVER SET-UP ###" << std::endl;
+    const double abs_tol = 1.0e-5;
+    const double rel_tol = 1.0e-3;
     const double max_iter = 200;
     PressureOperator<dim> pressure_operator(box_divisions, cell_size, active_cells_vect, lumped_mass_vector_inv_bcs);
+    std::cout << "Pressure linear operator created." << std::endl;
     PressureConjugateGradientSolver<dim> cg(abs_tol, rel_tol, max_iter, pressure_operator, fft_c);
-
+    std::cout << "Pressure conjugate gradient solver created." << std::endl;
 
     // Time loop
     unsigned int tot_p_iters = 0;
@@ -480,10 +482,14 @@ int main()
         // tot_p_iters += cg.iterations();
         // std::cout << "Pressure problem solved in " << cg.iterations() << " iterations." << std::endl;
 
-        cg.Solve(delta_p_rhs, delta_p);
+        const bool is_converged = cg.Solve(delta_p_rhs, delta_p);
         p += delta_p;
         tot_p_iters += cg.Iterations();
-        std::cout << "Pressure problem solved in " << cg.Iterations() << " iterations." << std::endl;
+        if (is_converged) {
+            std::cout << "Pressure problem converged in " << cg.Iterations() << " iterations." << std::endl;
+        } else {
+            std::cout << "Pressure problem did not converge in " << cg.Iterations() << " iterations." << std::endl;
+        }
 
         // Correct velocity
         Operators<dim>::ApplyGradientOperator(box_divisions, cell_size, active_cells, delta_p, delta_p_grad);
