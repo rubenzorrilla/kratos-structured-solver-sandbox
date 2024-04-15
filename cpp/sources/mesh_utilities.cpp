@@ -100,7 +100,7 @@ template<>
 void MeshUtilities<2>::CalculateLumpedMassVector(
     const double MassFactor,
     const std::array<int, 2>& rBoxDivisions,
-    const Eigen::Array<bool, Eigen::Dynamic, 1>& rActiveCells,
+    const std::vector<bool>& rActiveCells,
     Eigen::Array<double, Eigen::Dynamic, 2>& rLumpedMassVector)
 {
     const unsigned int num_nodes = std::get<0>(CalculateMeshData(rBoxDivisions));
@@ -111,7 +111,7 @@ void MeshUtilities<2>::CalculateLumpedMassVector(
     std::array<int, 4> cell_node_ids;
     for (unsigned int i = 0; i < rBoxDivisions[1]; ++i) {
         for (unsigned int j = 0; j < rBoxDivisions[0]; ++j) {
-            if (rActiveCells(CellUtilities::GetCellGlobalId(i, j, rBoxDivisions))) {
+            if (rActiveCells[CellUtilities::GetCellGlobalId(i, j, rBoxDivisions)]) {
                 CellUtilities::GetCellNodesGlobalIds(i, j, rBoxDivisions, cell_node_ids);
                 rLumpedMassVector(cell_node_ids, Eigen::all).array() += MassFactor;
             }
@@ -123,7 +123,7 @@ template<>
 void MeshUtilities<3>::CalculateLumpedMassVector(
     const double MassFactor,
     const std::array<int, 3>& rBoxDivisions,
-    const Eigen::Array<bool, Eigen::Dynamic, 1>& rActiveCells,
+    const std::vector<bool>& rActiveCells,
     Eigen::Array<double, Eigen::Dynamic, 3>& rLumpedMassVector)
 {
     const unsigned int num_nodes = std::get<0>(CalculateMeshData(rBoxDivisions));
@@ -135,7 +135,7 @@ void MeshUtilities<3>::CalculateLumpedMassVector(
     for (unsigned int i = 0; i < rBoxDivisions[1]; ++i) {
         for (unsigned int j = 0; j < rBoxDivisions[0]; ++j) {
             for (unsigned int k = 0; k < rBoxDivisions[2]; ++k) {
-                if (rActiveCells(CellUtilities::GetCellGlobalId(i, j, k, rBoxDivisions))) {
+                if (rActiveCells[CellUtilities::GetCellGlobalId(i, j, k, rBoxDivisions)]) {
                     CellUtilities::GetCellNodesGlobalIds(i, j, k, rBoxDivisions, cell_node_ids);
                     rLumpedMassVector(cell_node_ids, Eigen::all).array() += MassFactor;
                 }

@@ -14,10 +14,10 @@
 
 #include "cell_utilities.hpp"
 #include "incompressible_navier_stokes_q1_p0_structured_element.hpp"
-#include "matrix_replacement.hpp"
+// #include "matrix_replacement.hpp"
 #include "mesh_utilities.hpp"
 #include "operators.hpp"
-#include "pressure_preconditioner.hpp"
+// #include "pressure_preconditioner.hpp"
 #include "pressure_conjugate_gradient_solver.hpp"
 #include "runge_kutta_utilities.hpp"
 #include "sbm_utilities.hpp"
@@ -36,7 +36,7 @@ int main()
 
     // Input mesh data
     const std::array<double, dim> box_size({5.0, 1.0});
-    const std::array<int, dim> box_divisions({1500, 300});
+    const std::array<int, dim> box_divisions({150, 30});
     // const std::array<int, dim> box_divisions({3, 3});
 
     // Compute mesh data
@@ -131,7 +131,7 @@ int main()
     }
 
     // Create mesh dataset
-    Eigen::ArrayXd p = Eigen::VectorXd::Zero(num_cells);
+    std::vector<double> p(num_cells, 0.0);
     Eigen::ArrayXXd f = Eigen::MatrixXd::Zero(num_nodes, dim);
     Eigen::ArrayXXd v = Eigen::MatrixXd::Zero(num_nodes, dim);
     Eigen::ArrayXXd v_n = Eigen::MatrixXd::Zero(num_nodes, dim);
@@ -181,11 +181,11 @@ int main()
     cyl_orig(0) = 1.25;
     cyl_orig(1) = 0.5;
 
-    Eigen::Array<double, Eigen::Dynamic, 1> distance(num_nodes);
+    std::vector<double> distance(num_nodes);
     for (unsigned int i_node = 0; i_node < num_nodes; ++i_node) {
         const auto& r_coords = nodal_coords.row(i_node);
         const double dist = (r_coords - cyl_orig).matrix().norm();
-        distance(i_node) = dist < cyl_rad ? - dist : dist;
+        distance[i_node] = dist < cyl_rad ? - dist : dist;
         // distance(i_node) = 1.0;
         // distance(i_node) = r_coords[1] - 0.5;
     }
@@ -193,7 +193,7 @@ int main()
     std::ofstream distance_file(results_path + "distance.txt");
     if (distance_file.is_open()) {
         for (unsigned int i = 0; i < num_nodes; ++i) {
-            distance_file << distance(i) << std::endl;
+            distance_file << distance[i] << std::endl;
         }
     }
 
@@ -202,11 +202,11 @@ int main()
     Eigen::Array<double, Eigen::Dynamic, dim> v_surrogate(num_nodes, dim);
     v_surrogate.setZero();
 
-    Eigen::Array<bool, Eigen::Dynamic, 1> surrogate_nodes(num_nodes);
+    std::vector<bool> surrogate_nodes(num_nodes);
     SbmUtilities<dim>::FindSurrogateBoundaryNodes(box_divisions, distance, surrogate_nodes);
     std::cout << "Surrogate boundary nodes found." << std::endl;
 
-    Eigen::Array<bool, Eigen::Dynamic, 1> surrogate_cells(num_cells);
+    std::vector<bool> surrogate_cells(num_cells);
     SbmUtilities<dim>::FindSurrogateBoundaryCells(box_divisions, distance, surrogate_nodes, surrogate_cells);
     std::cout << "Surrogate boundary cells found." << std::endl;
 
@@ -214,7 +214,7 @@ int main()
     Eigen::Vector<double, dim> aux_dir;
     Eigen::Array<double, Eigen::Dynamic, dim> distance_vects(num_nodes, dim);
     for (unsigned int i_node = 0; i_node < num_nodes; ++i_node) {
-        if (surrogate_nodes(i_node)) {
+        if (surrogate_nodes[i_node]) {
             const auto& r_coords = nodal_coords.row(i_node);
             aux_dir = cyl_orig - r_coords;
             aux_dir /= aux_dir.norm();
@@ -234,22 +234,20 @@ int main()
 
     // Apply fixity in the surrogate boundary nodes
     for (unsigned int i_node = 0; i_node < num_nodes; ++i_node) {
-        if (surrogate_nodes(i_node)) {
+        if (surrogate_nodes[i_node]) {
             fixity.row(i_node).setConstant(true);
         }
     }
 
     // Deactivate the interior and intersected cells (SBM-like resolution)
-    Eigen::Array<bool, Eigen::Dynamic, 1> active_cells(num_cells);
-    std::vector<bool> active_cells_vect(num_cells);
+    std::vector<bool> active_cells(num_cells);
     if constexpr (dim == 2) {
         std::array<int,4> cell_node_ids;
         for (unsigned int i = 0; i < box_divisions[1]; ++i) {
             for (unsigned int j = 0; j < box_divisions[0]; ++j) {
                 CellUtilities::GetCellNodesGlobalIds(i, j, box_divisions, cell_node_ids);
                 const auto cell_fixity = fixity(cell_node_ids, Eigen::all);
-                active_cells(CellUtilities::GetCellGlobalId(i, j, box_divisions)) = !cell_fixity.all();
-                active_cells_vect[CellUtilities::GetCellGlobalId(i, j, box_divisions)] = !cell_fixity.all();
+                active_cells[CellUtilities::GetCellGlobalId(i, j, box_divisions)] = !cell_fixity.all();
             }
         }
     } else {
@@ -309,16 +307,15 @@ int main()
     // But we can replace this null coefficient by anything different from 0.
     // At most it would degrade the convergence of the PCG, but we will see that the convergence is OK.
     std::cout << "\n### PRESSURE PRECONDITIONER SET-UP ###" << std::endl;
-    Eigen::ArrayXd fft_c(num_cells);
-    PressurePreconditioner pressure_precond;
+    Eigen::ArrayXd aux_fft_c(num_cells); //TODO: Avoid this copy by using Eigen FFT with std::vector
+    std::vector<double> fft_c(num_cells);
     auto free_cell_result = MeshUtilities<dim>::FindFirstFreeCellId(box_divisions, fixity);
     if (std::get<0>(free_cell_result)) {
         const unsigned int free_cell_id = std::get<1>(free_cell_result);
         std::cout << "Free cell id: " << free_cell_id << "." <<std::endl;
-        Eigen::VectorXd x(num_cells);
-        Eigen::VectorXd y(num_cells);
-        x.setZero();
-        x(free_cell_id) = 1.0;
+        std::vector<double> x(num_cells, 0.0);
+        std::vector<double> y(num_cells);
+        x[free_cell_id] = 1.0;
         Operators<dim>::ApplyPressureOperator(box_divisions, cell_size, active_cells, lumped_mass_vector_inv, x, y);
 
         Eigen::Matrix<std::complex<double>, Eigen::Dynamic, 1> fft_x(num_cells); // Complex array for FFT(x) output
@@ -326,16 +323,18 @@ int main()
         Eigen::Matrix<std::complex<double>, Eigen::Dynamic, 1> x_complex(num_cells, 1); // Complex array for FFT(x) input
         Eigen::Matrix<std::complex<double>, Eigen::Dynamic, 1> y_complex(num_cells, 1); // Complex array for FFT(y) input
         for (unsigned int i = 0; i < num_cells; ++i) {
-            x_complex(i) = x(i); // Set x_complex real data from x
-            y_complex(i) = y(i); // Set y_complex real data from y
+            x_complex(i) = x[i]; // Set x_complex real data from x
+            y_complex(i) = y[i]; // Set y_complex real data from y
         }
 
         Eigen::FFT<double> fft;
         fft.fwd(fft_x, x_complex);
         fft.fwd(fft_y, y_complex);
-        fft_c = (fft_y.array() / fft_x.array()).real(); // Take the real part only (imaginary one is zero)
-        fft_c(0) = 1.0; // Remove the first coefficient as this is associated to the solution average
-        pressure_precond.setFFT(fft_c); // Instantiate the pressure preconditioner
+        aux_fft_c = (fft_y.array() / fft_x.array()).real(); // Take the real part only (imaginary one is zero)
+        aux_fft_c(0) = 1.0; // Remove the first coefficient as this is associated to the solution average
+        for (unsigned int i = 0; i < num_cells; ++i) {
+            fft_c[i] = *(aux_fft_c.begin() + i);
+        }
         std::cout << "Pressure preconditioner set." << std::endl;
     } else {
         std::cout << "There is no cell with all the DOFs free. No pressure preconditioner can be set." << std::endl;
@@ -343,8 +342,8 @@ int main()
 
     // Set Runge-Kutta arrays
     constexpr int rk_order = 4;
-    Eigen::Array<double, rk_order, 1> rk_B;
-    Eigen::Array<double, rk_order, 1> rk_C;
+    std::array<double, rk_order> rk_B;
+    std::array<double, rk_order> rk_C;
     Eigen::Array<double, rk_order, rk_order> rk_A;
     RungeKuttaUtilities<rk_order>::SetNodesVector(rk_C);
     RungeKuttaUtilities<rk_order>::SetWeightsVector(rk_B);
@@ -359,11 +358,8 @@ int main()
     }
 
     // Allocate auxiliary arrays for the pressure problem
-    // Eigen::VectorXd delta_p(num_cells);
-    Eigen::Array<double, Eigen::Dynamic, 1> delta_p(num_cells);
-    delta_p.setZero();
-    Eigen::VectorXd delta_p_rhs(num_cells);
-    MatrixReplacement<dim> matrix_replacement(box_divisions, cell_size, active_cells, lumped_mass_vector_inv_bcs);
+    std::vector<double> delta_p(num_cells);
+    std::vector<double> delta_p_rhs(num_cells);
 
     // Allocate auxiliary arrays for the velocity update
     Eigen::Matrix<double, Eigen::Dynamic, dim> delta_p_grad(num_nodes, dim);
@@ -372,7 +368,7 @@ int main()
     const double abs_tol = 1.0e-5;
     const double rel_tol = 1.0e-3;
     const double max_iter = 5000;
-    PressureOperator<dim> pressure_operator(box_divisions, cell_size, active_cells_vect, lumped_mass_vector_inv_bcs);
+    PressureOperator<dim> pressure_operator(box_divisions, cell_size, active_cells, lumped_mass_vector_inv_bcs);
     std::cout << "Pressure linear operator created." << std::endl;
     PressureConjugateGradientSolver<dim> cg(abs_tol, rel_tol, max_iter, pressure_operator, fft_c);
     std::cout << "Pressure conjugate gradient solver created." << std::endl;
@@ -391,7 +387,7 @@ int main()
         SbmUtilities<dim>::UpdateSurrogateBoundaryDirichletValues(mass_factor, box_divisions, cell_size, surrogate_cells, surrogate_nodes, lumped_mass_vector, distance_vects, v, v_surrogate);
         //TODO: We can get rid of v_surrogate (but lets keep it for debugging for a while)
         for (unsigned int i = 0; i < num_nodes; ++i) {
-            if (surrogate_nodes(i)) {
+            if (surrogate_nodes[i]) {
                 v(i, Eigen::all) = v_surrogate.row(i);
                 v_n(i, Eigen::all) = v_surrogate.row(i);
             }
@@ -430,10 +426,10 @@ int main()
                 for (unsigned int i = 0; i < box_divisions[1]; ++i) {
                     for (unsigned int j = 0; j < box_divisions[0]; ++j) {
                         const unsigned int i_cell = CellUtilities::GetCellGlobalId(i, j, box_divisions);
-                        if (active_cells(i_cell)) {
+                        if (active_cells[i_cell]) {
                             // Get current cell data
                             CellUtilities::GetCellNodesGlobalIds(i, j, box_divisions, cell_node_ids);
-                            const double cell_p = p(i_cell);
+                            const double cell_p = p[i_cell];
                             cell_v = rk_v(cell_node_ids, Eigen::all);
                             cell_f = f(cell_node_ids, Eigen::all);
                             cell_acc = acc(cell_node_ids, Eigen::all);
@@ -473,20 +469,13 @@ int main()
         // Solve pressure update
         Operators<dim>::ApplyDivergenceOperator(box_divisions, cell_size, active_cells, v, delta_p_rhs);
         for (unsigned int i = 0; i < num_cells; ++i) {
-            delta_p_rhs(i) = -delta_p_rhs(i) / dt;
+            delta_p_rhs[i] = -delta_p_rhs[i] / dt;
         }
 
-        // Eigen::ConjugateGradient<MatrixReplacement<dim>, Eigen::Lower | Eigen::Upper, Eigen::IdentityPreconditioner> cg;
-        // // Eigen::ConjugateGradient<MatrixReplacement<dim>, Eigen::Lower|Eigen::Upper, PressurePreconditioner> cg;
-        // // cg.preconditioner() = pressure_precond;
-        // cg.compute(matrix_replacement);
-        // delta_p = cg.solve(delta_p_rhs);
-        // p += delta_p.array();
-        // tot_p_iters += cg.iterations();
-        // std::cout << "Pressure problem solved in " << cg.iterations() << " iterations." << std::endl;
-
         const bool is_converged = cg.Solve(delta_p_rhs, delta_p);
-        p += delta_p;
+        for (unsigned int i = 0; i < num_cells; ++i) {
+            p[i] += delta_p[i];
+        }
         tot_p_iters += cg.Iterations();
         if (is_converged) {
             std::cout << "Pressure problem converged in " << cg.Iterations() << " iterations." << std::endl;
@@ -515,7 +504,9 @@ int main()
             }
             if (p_file.is_open()) {
                 p_file << current_time << std::endl;
-                p_file << p.format(out_format);
+                for (unsigned int i = 0; i < num_cells; ++i) {
+                    p_file << p[i] << std::endl;
+                }
                 p_file.close();
             }
             std::cout << "Results output completed." << std::endl;

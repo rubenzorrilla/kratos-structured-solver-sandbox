@@ -16,7 +16,7 @@ class PressureConjugateGradientSolver
 {
 public:
 
-    using VectorType = Eigen::Array<double, Eigen::Dynamic, 1>;
+    using VectorType = std::vector<double>;
 
     PressureConjugateGradientSolver() = default;
 
@@ -60,7 +60,9 @@ public:
         VectorType r_k(mProblemSize);
         VectorType aux(mProblemSize);
         mrPressureOperator.Apply(rX, aux); //TODO: We can do a mult and add to make this more efficient
-        r_k = rB - aux;
+        for (unsigned int i = 0; i < mProblemSize; ++i) {
+            r_k[i] = rB[i] - aux[i];
+        }
 
         // Check initial residual
         const double res_norm = ComputeResidualNorm(r_k);
@@ -88,15 +90,15 @@ public:
             double aux_2 = 0.0;
             mrPressureOperator.Apply(d_k, aux);
             for (unsigned int i = 0; i < mProblemSize; ++i) {
-                // aux_1 += r_k(i) * r_k(i); // Identity preconditioner
-                aux_1 += r_k(i) * z_k(i);
-                aux_2 += d_k(i) * aux(i);
+                // aux_1 += r_k[i] * r_k[i]; // Identity preconditioner
+                aux_1 += r_k[i] * z_k[i];
+                aux_2 += d_k[i] * aux[i];
             }
             const double alpha_k = aux_1 / aux_2;
 
             for (unsigned int i = 0; i < mProblemSize; ++i) {
-                rX(i) = rX(i) + alpha_k * d_k(i);
-                r_k_1(i) = r_k(i) - alpha_k * aux(i);
+                rX[i] = rX[i] + alpha_k * d_k[i];
+                r_k_1[i] = r_k[i] - alpha_k * aux[i];
             }
 
             // Check convergence
@@ -119,16 +121,16 @@ public:
             double aux_4 = 0.0;
             ApplyPreconditioner(r_k_1, z_k_1);
             for (unsigned int i = 0; i < mProblemSize; ++i) {
-                aux_3 += r_k_1(i) * z_k_1(i);
-                aux_4 += r_k(i) * z_k(i);
-                // aux_3 += r_k_1(i) * r_k_1(i); // Identity preconditioner
-                // aux_4 += r_k(i) * r_k(i); // Identity preconditioner
+                aux_3 += r_k_1[i] * z_k_1[i];
+                aux_4 += r_k[i] * z_k[i];
+                // aux_3 += r_k_1[i] * r_k_1[i]; // Identity preconditioner
+                // aux_4 += r_k[i] * r_k[i]; // Identity preconditioner
             }
             const double beta_k = aux_3 / aux_4;
 
             for (unsigned int i = 0; i < mProblemSize; ++i) {
-                d_k_1(i) = z_k_1(i) + beta_k * d_k(i);
-                // d_k_1(i) = r_k_1(i) + beta_k * d_k(i); // Identity preconditioner
+                d_k_1[i] = z_k_1[i] + beta_k * d_k[i];
+                // d_k_1[i] = r_k_1[i] + beta_k * d_k[i]; // Identity preconditioner
             }
 
             // Update variables for next step
@@ -164,7 +166,7 @@ private:
     {
         double res_norm = 0.0;
         for (unsigned int i = 0; i < mProblemSize; ++i) {
-            res_norm += rRes(i) * rRes(i);
+            res_norm += rRes[i] * rRes[i];
         }
         return std::sqrt(res_norm);
     }
@@ -176,8 +178,8 @@ private:
         double res_norm = 0.0;
         double res_inc_norm = 0.0;
         for (unsigned int i = 0; i < mProblemSize; ++i) {
-            res_norm += rRes(i) * rRes(i);
-            res_inc_norm += std::pow(rRes(i) - rOldRes(i), 2);
+            res_norm += rRes[i] * rRes[i];
+            res_inc_norm += std::pow(rRes[i] - rOldRes[i], 2);
         }
         return std::make_pair(std::sqrt(res_norm), std::sqrt(res_inc_norm));
     }
@@ -189,17 +191,19 @@ private:
         Eigen::Matrix<std::complex<double>, Eigen::Dynamic, 1> fft_b(mProblemSize);     // Complex array for FFT(x) output
         Eigen::Matrix<std::complex<double>, Eigen::Dynamic, 1> b_complex(mProblemSize); // Complex array for FFT(x) input
         for (unsigned int i = 0; i < mProblemSize; ++i) {
-            b_complex(i) = rInput(i);
+            b_complex(i) = rInput[i];
         }
 
         Eigen::FFT<double> fft;
         Eigen::Matrix<std::complex<double>, Eigen::Dynamic, 1> sol(mProblemSize);
         fft.fwd(fft_b, b_complex);
         for (unsigned int i = 0; i < mProblemSize; ++i) {
-            fft_b(i) = fft_b(i) / mrFFTc(i);
+            fft_b(i) = fft_b(i) / mrFFTc[i];
         }
         fft.inv(sol, fft_b);
-        rOutput = sol.real();
+        for (unsigned int i = 0; i < mProblemSize; ++i) {
+            rOutput[i] = (sol.real())(i);
+        }
     }
 
 };

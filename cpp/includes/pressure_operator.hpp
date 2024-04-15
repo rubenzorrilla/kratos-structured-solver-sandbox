@@ -11,7 +11,7 @@ class PressureOperator
 {
 public:
 
-    using VectorType = Eigen::Array<double, Eigen::Dynamic, 1>;
+    using VectorType = std::vector<double>;
 
     using MatrixType = Eigen::Array<double, Eigen::Dynamic, TDim>;
 

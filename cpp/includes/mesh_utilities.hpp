@@ -24,7 +24,7 @@ public:
     static void CalculateLumpedMassVector(
         const double MassFactor,
         const std::array<int, TDim>& rBoxDivisions,
-        const Eigen::Array<bool, Eigen::Dynamic, 1>& rActiveCells,
+        const std::vector<bool>& rActiveCells,
         Eigen::Array<double, Eigen::Dynamic, TDim>& rLumpedMassVector);
 
     static std::tuple<bool, unsigned int> FindFirstFreeCellId(

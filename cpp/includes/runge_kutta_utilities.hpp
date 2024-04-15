@@ -10,9 +10,9 @@ class RungeKuttaUtilities
 {
 public:
 
-    static void SetNodesVector(Eigen::Array<double, TOrder, 1>& rNodesVector);
+    static void SetNodesVector(std::array<double, TOrder>& rNodesVector);
 
-    static void SetWeightsVector(Eigen::Array<double, TOrder, 1>& rWeightsVector);
+    static void SetWeightsVector(std::array<double, TOrder>& rWeightsVector);
 
     static void SetRungeKuttaMatrix(Eigen::Array<double, TOrder, TOrder>& rRungeKuttaMatrix);
 
