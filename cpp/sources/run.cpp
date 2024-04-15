@@ -9,15 +9,12 @@
 #include <filesystem>
 
 #include <Eigen/Dense>
-#include <Eigen/IterativeLinearSolvers>
 #include <unsupported/Eigen/FFT>
 
 #include "cell_utilities.hpp"
 #include "incompressible_navier_stokes_q1_p0_structured_element.hpp"
-// #include "matrix_replacement.hpp"
 #include "mesh_utilities.hpp"
 #include "operators.hpp"
-// #include "pressure_preconditioner.hpp"
 #include "pressure_conjugate_gradient_solver.hpp"
 #include "runge_kutta_utilities.hpp"
 #include "sbm_utilities.hpp"
@@ -307,7 +304,6 @@ int main()
     // But we can replace this null coefficient by anything different from 0.
     // At most it would degrade the convergence of the PCG, but we will see that the convergence is OK.
     std::cout << "\n### PRESSURE PRECONDITIONER SET-UP ###" << std::endl;
-    Eigen::ArrayXd aux_fft_c(num_cells); //TODO: Avoid this copy by using Eigen FFT with std::vector
     std::vector<double> fft_c(num_cells);
     auto free_cell_result = MeshUtilities<dim>::FindFirstFreeCellId(box_divisions, fixity);
     if (std::get<0>(free_cell_result)) {
@@ -318,23 +314,22 @@ int main()
         x[free_cell_id] = 1.0;
         Operators<dim>::ApplyPressureOperator(box_divisions, cell_size, active_cells, lumped_mass_vector_inv, x, y);
 
-        Eigen::Matrix<std::complex<double>, Eigen::Dynamic, 1> fft_x(num_cells); // Complex array for FFT(x) output
-        Eigen::Matrix<std::complex<double>, Eigen::Dynamic, 1> fft_y(num_cells); // Complex array for FFT(y) output
-        Eigen::Matrix<std::complex<double>, Eigen::Dynamic, 1> x_complex(num_cells, 1); // Complex array for FFT(x) input
-        Eigen::Matrix<std::complex<double>, Eigen::Dynamic, 1> y_complex(num_cells, 1); // Complex array for FFT(y) input
+        std::vector<std::complex<double>> fft_x(num_cells); // Complex array for FFT(x) output
+        std::vector<std::complex<double>> fft_y(num_cells); // Complex array for FFT(y) output
+        std::vector<std::complex<double>> x_complex(num_cells); // Complex array for FFT(x) input
+        std::vector<std::complex<double>> y_complex(num_cells); // Complex array for FFT(y) input
         for (unsigned int i = 0; i < num_cells; ++i) {
-            x_complex(i) = x[i]; // Set x_complex real data from x
-            y_complex(i) = y[i]; // Set y_complex real data from y
+            x_complex[i].real(x[i]); // Set x_complex real data from x
+            y_complex[i].real(y[i]); // Set y_complex real data from y
         }
 
         Eigen::FFT<double> fft;
         fft.fwd(fft_x, x_complex);
         fft.fwd(fft_y, y_complex);
-        aux_fft_c = (fft_y.array() / fft_x.array()).real(); // Take the real part only (imaginary one is zero)
-        aux_fft_c(0) = 1.0; // Remove the first coefficient as this is associated to the solution average
         for (unsigned int i = 0; i < num_cells; ++i) {
-            fft_c[i] = *(aux_fft_c.begin() + i);
+            fft_c[i] = (fft_y[i] / fft_x[i]).real(); // Take the real part only (imaginary one is zero)
         }
+        fft_c[0] = 1.0; // Remove the first coefficient as this is associated to the solution average
         std::cout << "Pressure preconditioner set." << std::endl;
     } else {
         std::cout << "There is no cell with all the DOFs free. No pressure preconditioner can be set." << std::endl;
