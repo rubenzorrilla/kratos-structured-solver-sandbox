@@ -36,7 +36,7 @@ int main()
 
     // Input mesh data
     const std::array<double, dim> box_size({5.0, 1.0});
-    const std::array<int, dim> box_divisions({150, 30});
+    const std::array<int, dim> box_divisions({1500, 300});
     // const std::array<int, dim> box_divisions({3, 3});
 
     // Compute mesh data
@@ -55,7 +55,7 @@ int main()
     }
 
     // Create results directory
-    std::cout << "\n### OUTPUT FOLDER ###" << std::endl;
+    std::cout << "\n### OUTPUT DATA ###" << std::endl;
     struct stat buffer;
     const std::string results_path = "../cpp_output/";
     if (!(stat(results_path.c_str(), &buffer) == 0 && S_ISDIR(buffer.st_mode))) {
@@ -69,6 +69,9 @@ int main()
         std::cout << "Results directory already exists." << std::endl;
     }
     std::cout << "Writing results to: " << results_path << std::endl;
+
+    const unsigned int output_interval = 100;
+    std::cout << "Writing interval: " << output_interval << std::endl;
 
     // Purge previous output
     const bool purge_output = true;
@@ -368,7 +371,7 @@ int main()
     std::cout << "\n### PRESSURE SOLVER SET-UP ###" << std::endl;
     const double abs_tol = 1.0e-5;
     const double rel_tol = 1.0e-3;
-    const double max_iter = 200;
+    const double max_iter = 5000;
     PressureOperator<dim> pressure_operator(box_divisions, cell_size, active_cells_vect, lumped_mass_vector_inv_bcs);
     std::cout << "Pressure linear operator created." << std::endl;
     PressureConjugateGradientSolver<dim> cg(abs_tol, rel_tol, max_iter, pressure_operator, fft_c);
@@ -501,20 +504,22 @@ int main()
         std::cout << "Velocity update finished." << std::endl;
 
         // Output current step solution
-        const static Eigen::IOFormat out_format(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
-        std::ofstream v_file(results_path + "v_" + std::to_string(current_step) + ".txt");
-        std::ofstream p_file(results_path + "p_" + std::to_string(current_step) + ".txt");
-        if (v_file.is_open()) {
-            v_file << current_time << std::endl;
-            v_file << v.format(out_format);
-            v_file.close();
+        if ((current_step % output_interval) < 1.0e-12)  {
+            const static Eigen::IOFormat out_format(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
+            std::ofstream v_file(results_path + "v_" + std::to_string(current_step) + ".txt");
+            std::ofstream p_file(results_path + "p_" + std::to_string(current_step) + ".txt");
+            if (v_file.is_open()) {
+                v_file << current_time << std::endl;
+                v_file << v.format(out_format);
+                v_file.close();
+            }
+            if (p_file.is_open()) {
+                p_file << current_time << std::endl;
+                p_file << p.format(out_format);
+                p_file.close();
+            }
+            std::cout << "Results output completed." << std::endl;
         }
-        if (p_file.is_open()) {
-            p_file << current_time << std::endl;
-            p_file << p.format(out_format);
-            p_file.close();
-        }
-        std::cout << "Results output completed.\n" << std::endl;
 
         // Update variables for next time step
         acc = (v - v_n) / dt;
