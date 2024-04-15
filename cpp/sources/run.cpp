@@ -10,6 +10,7 @@
 
 #include <Eigen/Dense>
 #include <unsupported/Eigen/FFT>
+#include "include/experimental/mdspan"
 
 #include "cell_utilities.hpp"
 #include "incompressible_navier_stokes_q1_p0_structured_element.hpp"
@@ -24,6 +25,7 @@ int main()
 {
     // Problem data
     static constexpr int dim = 2;
+    static constexpr int cell_nodes = dim == 2 ? 4 : 8;
     const double end_time = 4.5e1;
     const double init_time = 0.0;
 
@@ -33,7 +35,7 @@ int main()
 
     // Input mesh data
     const std::array<double, dim> box_size({5.0, 1.0});
-    const std::array<int, dim> box_divisions({150, 30});
+    const std::array<int, dim> box_divisions({1500, 300});
     // const std::array<int, dim> box_divisions({3, 3});
 
     // Compute mesh data
@@ -129,10 +131,14 @@ int main()
 
     // Create mesh dataset
     std::vector<double> p(num_cells, 0.0);
-    Eigen::ArrayXXd f = Eigen::MatrixXd::Zero(num_nodes, dim);
+    // Eigen::ArrayXXd f = Eigen::MatrixXd::Zero(num_nodes, dim);
+    std::vector<double> f_data(num_nodes*dim, 0.0);
     Eigen::ArrayXXd v = Eigen::MatrixXd::Zero(num_nodes, dim);
     Eigen::ArrayXXd v_n = Eigen::MatrixXd::Zero(num_nodes, dim);
     Eigen::ArrayXXd acc = Eigen::MatrixXd::Zero(num_nodes, dim);
+
+    // Create mdspan views of the above dataset
+    auto f = std::experimental::mdspan(f_data.data(), num_nodes, dim);
 
     // Set velocity fixity vector and BCs
     // Note that these overwrite the initial conditions above
@@ -252,7 +258,11 @@ int main()
     }
 
     // Set forcing term
-    f.setZero();
+    for (unsigned int i = 0; i < num_nodes; ++i) {
+        for (unsigned int d = 0; d < dim; ++d) {
+            f(i,d) = 0.0;
+        }
+    }
 
     // Set final free/fixed DOFs arrays
     // TODO: Check if there is a more efficient way to do this
@@ -426,8 +436,13 @@ int main()
                             CellUtilities::GetCellNodesGlobalIds(i, j, box_divisions, cell_node_ids);
                             const double cell_p = p[i_cell];
                             cell_v = rk_v(cell_node_ids, Eigen::all);
-                            cell_f = f(cell_node_ids, Eigen::all);
                             cell_acc = acc(cell_node_ids, Eigen::all);
+
+                            for (unsigned int i_node = 0; i_node < cell_nodes; ++i_node) {
+                                for (unsigned int d = 0; d < dim; ++d) {
+                                    cell_f(i_node, d) = f(cell_node_ids[i_node], d);
+                                }
+                            }
 
                             // Calculate current cell residual
                             IncompressibleNavierStokesQ1P0StructuredElement::CalculateRightHandSide(cell_size[0], cell_size[1], mu, rho, cell_v, cell_p, cell_f, cell_acc, cell_res);

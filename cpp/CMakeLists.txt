@@ -30,7 +30,8 @@ if(NOT CMAKE_BUILD_TYPE)
 endif(NOT CMAKE_BUILD_TYPE)
 
 include_directories("includes") # Header files directories
-include_directories("external_libraries/eigen-3.4.0") # Header files directories
+include_directories("external_libraries/eigen-3.4.0") # Include Eigen directories
+include_directories("external_libraries/mdspan-mdspan-0.6.0") # Include mdspan directories
 
 file (GLOB_RECURSE KRATOS_STRUCTURED_SOLVER_SANDBOX_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/sources/cell_utilities.cpp
