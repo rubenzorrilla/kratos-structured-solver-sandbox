@@ -1,7 +1,6 @@
 #include <array>
 #include <utility>
 #include <vector>
-#include <Eigen/Dense>
 
 #include "include/experimental/mdspan"
 
@@ -32,12 +31,6 @@ public:
         const std::array<double, TDim>& rBoxSize,
         const std::array<int, TDim>& rBoxDivisions,
         MatrixViewType& rNodalCoords);
-
-    static void CalculateLumpedMassVector(
-        const double MassFactor,
-        const std::array<int, TDim>& rBoxDivisions,
-        const std::vector<bool>& rActiveCells,
-        Eigen::Array<double, Eigen::Dynamic, TDim>& rLumpedMassVector);
 
     static void CalculateLumpedMassVector(
         const double MassFactor,

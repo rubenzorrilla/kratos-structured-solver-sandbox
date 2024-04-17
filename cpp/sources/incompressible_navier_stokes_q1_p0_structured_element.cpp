@@ -5,11 +5,11 @@ void IncompressibleNavierStokesQ1P0StructuredElement::CalculateRightHandSide(
     const double b,
     const double mu,
     const double rho,
-    const Eigen::Array<double, 4, 2>& v,
+    const QuadVectorDataView& v,
     const double p,
-    const Eigen::Array<double, 4, 2>& f,
-    const Eigen::Array<double, 4, 2>& acc,
-    Eigen::Array<double, 8, 1>& RHS)
+    const QuadVectorDataView& f,
+    const QuadVectorDataView& acc,
+    std::array<double, 8>& RHS)
 {
 
     const double cRHS0 = pow(a, -2);
@@ -318,7 +318,7 @@ void IncompressibleNavierStokesQ1P0StructuredElement::GetCellGradientOperator(
 void IncompressibleNavierStokesQ1P0StructuredElement::GetCellGradientOperator(
     const double a,
     const double b,
-    std::experimental::mdspan<double, std::experimental::extents<std::size_t, 4, 2>>& G)
+    QuadVectorDataView& G)
 {
 
     const double cG0 = 0.5*b;
@@ -342,11 +342,11 @@ void IncompressibleNavierStokesQ1P0StructuredElement::CalculateRightHandSide(
     const double c,
     const double mu,
     const double rho,
-    const Eigen::Array<double, 8, 3>& v,
+    const HexaVectorDataView& v,
     const double p,
-    const Eigen::Array<double, 8, 3>& f,
-    const Eigen::Array<double, 8, 3>& acc,
-    Eigen::Array<double, 24, 1>& RHS)
+    const HexaVectorDataView& f,
+    const HexaVectorDataView& acc,
+    std::array<double, 24>& RHS)
 {
 
 //substitute_rhs_3d
@@ -366,7 +366,7 @@ void IncompressibleNavierStokesQ1P0StructuredElement::GetCellGradientOperator(
     const double a,
     const double b,
     const double c,
-    std::experimental::mdspan<double, std::experimental::extents<std::size_t, 8, 3>>& G)
+    HexaVectorDataView& G)
 {
 
 //substitute_G_3d

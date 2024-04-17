@@ -7,16 +7,20 @@ class IncompressibleNavierStokesQ1P0StructuredElement
 {
 public:
 
+    using QuadVectorDataView = std::experimental::mdspan<double, std::experimental::extents<std::size_t, 4, 2>>;
+
+    using HexaVectorDataView = std::experimental::mdspan<double, std::experimental::extents<std::size_t, 8, 3>>;
+
     static void CalculateRightHandSide(
         const double a,
         const double b,
         const double mu,
         const double rho,
-        const Eigen::Array<double, 4, 2>& v,
+        const QuadVectorDataView& v,
         const double p,
-        const Eigen::Array<double, 4, 2>& f,
-        const Eigen::Array<double, 4, 2>& acc,
-        Eigen::Array<double, 8, 1>& RHS);
+        const QuadVectorDataView& f,
+        const QuadVectorDataView& acc,
+        std::array<double, 8>& RHS);
 
     static void CalculateRightHandSide(
         const double a,
@@ -24,11 +28,11 @@ public:
         const double c,
         const double mu,
         const double rho,
-        const Eigen::Array<double, 8, 3>& v,
+        const HexaVectorDataView& v,
         const double p,
-        const Eigen::Array<double, 8, 3>& f,
-        const Eigen::Array<double, 8, 3>& acc,
-        Eigen::Array<double, 24, 1>& RHS);
+        const HexaVectorDataView& f,
+        const HexaVectorDataView& acc,
+        std::array<double, 24>& RHS);
 
     static void GetCellGradientOperator(
         const double a,
@@ -38,7 +42,7 @@ public:
     static void GetCellGradientOperator(
         const double a,
         const double b,
-        std::experimental::mdspan<double, std::experimental::extents<std::size_t, 4, 2>>& G);
+        QuadVectorDataView& G);
 
     static void GetCellGradientOperator(
         const double a,
@@ -50,5 +54,5 @@ public:
         const double a,
         const double b,
         const double c,
-        std::experimental::mdspan<double, std::experimental::extents<std::size_t, 8, 3>>& G);
+        HexaVectorDataView& G);
 };

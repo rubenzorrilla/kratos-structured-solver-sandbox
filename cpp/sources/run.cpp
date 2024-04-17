@@ -8,7 +8,6 @@
 #include <sys/stat.h>
 #include <filesystem>
 
-#include <Eigen/Dense>
 #include <unsupported/Eigen/FFT>
 #include "include/experimental/mdspan"
 
@@ -402,11 +401,8 @@ int main()
     constexpr int rk_num_steps = rk_order;
     double rk_v_data[num_nodes * dim];
     MatrixViewType rk_v(rk_v_data, num_nodes, dim);
-    // Eigen::Array<double, Eigen::Dynamic, dim> rk_v(num_nodes, dim);
-    std::array<Eigen::Array<double, Eigen::Dynamic, dim>, rk_num_steps> rk_res;
-    for (auto& r_arr : rk_res) {
-        r_arr.resize(num_nodes, dim);
-    }
+    double rk_res_data[rk_num_steps * num_nodes * dim];
+    std::experimental::mdspan<double, std::experimental::extents<std::size_t, rk_num_steps, std::dynamic_extent, dim>> rk_res(rk_res_data, rk_num_steps, num_nodes, dim);
 
     // Allocate auxiliary arrays for the pressure problem
     std::vector<double> delta_p(num_cells);
@@ -449,8 +445,11 @@ int main()
         // Calculate intermediate residuals
         for (unsigned int rk_step = 0; rk_step < rk_num_steps; ++rk_step) {
             // Initialize current intermediate step residual
-            auto& r_rk_step_res = rk_res[rk_step];
-            r_rk_step_res.setZero();
+            for (unsigned int i = 0; i < num_nodes; ++i) {
+                for (unsigned int j = 0; j < dim; ++j) {
+                    rk_res(rk_step, i, j) = 0.0;
+                }
+            }
 
             // Calculate current step velocity for residual calculation
             const double rk_theta = rk_C[rk_step];
@@ -460,7 +459,7 @@ int main()
                 const double a_ij = rk_A(rk_step, i_step);
                 for (unsigned int i = 0; i < num_nodes; ++i) {
                     for (unsigned int d = 0; d < dim; ++d) {
-                        rk_v(i, d) += a_ij * rk_res[i_step](i, d);
+                        rk_v(i, d) += a_ij * rk_res(i_step, i, d);
                     }
                 }
             }
@@ -481,11 +480,14 @@ int main()
 
             // Calculate current step residual
             if constexpr (dim == 2) {
+                double cell_v_data[8];
+                double cell_f_data[8];
+                double cell_acc_data[8];
+                IncompressibleNavierStokesQ1P0StructuredElement::QuadVectorDataView cell_v(cell_v_data);
+                IncompressibleNavierStokesQ1P0StructuredElement::QuadVectorDataView cell_f(cell_f_data);
+                IncompressibleNavierStokesQ1P0StructuredElement::QuadVectorDataView cell_acc(cell_acc_data);
                 std::array<int,4> cell_node_ids;
-                Eigen::Array<double, 4, 2> cell_v;
-                Eigen::Array<double, 4, 2> cell_f;
-                Eigen::Array<double, 4, 2> cell_acc;
-                Eigen::Array<double, 8, 1> cell_res;
+                std::array<double, 8> cell_res;
                 for (unsigned int i = 0; i < box_divisions[1]; ++i) {
                     for (unsigned int j = 0; j < box_divisions[0]; ++j) {
                         const unsigned int i_cell = CellUtilities::GetCellGlobalId(i, j, box_divisions);
@@ -493,7 +495,6 @@ int main()
                             // Get current cell data
                             CellUtilities::GetCellNodesGlobalIds(i, j, box_divisions, cell_node_ids);
                             const double cell_p = p[i_cell];
-
                             for (unsigned int i_node = 0; i_node < cell_nodes; ++i_node) {
                                 for (unsigned int d = 0; d < dim; ++d) {
                                     cell_f(i_node, d) = f(cell_node_ids[i_node], d);
@@ -509,7 +510,7 @@ int main()
                             unsigned int aux_i = 0;
                             for (const int id_node : cell_node_ids) {
                                 for (unsigned int d = 0; d < 2; ++d) {
-                                    rk_res[rk_step](id_node, d) += cell_res(2 * aux_i + d);
+                                    rk_res(rk_step, id_node, d) += cell_res[2 * aux_i + d];
                                 }
                                 aux_i++;
                             }
@@ -527,7 +528,7 @@ int main()
             const unsigned int dof_col = free_dofs_cols[i_dof];
             v(dof_row, dof_col) = 0.0;
             for (unsigned int rk_step = 0; rk_step < rk_num_steps; ++rk_step) {
-                v(dof_row, dof_col) += rk_B[rk_step] * rk_res[rk_step](dof_row, dof_col);
+                v(dof_row, dof_col) += rk_B[rk_step] * rk_res(rk_step, dof_row, dof_col);
             }
             v(dof_row, dof_col) *= dt * lumped_mass_vector_inv(dof_row, dof_col);
             v(dof_row, dof_col) += v_n(dof_row, dof_col);
@@ -562,7 +563,6 @@ int main()
 
         // Output current step solution
         if ((current_step % output_interval) < 1.0e-12)  {
-            const static Eigen::IOFormat out_format(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
             std::ofstream v_file(results_path + "v_" + std::to_string(current_step) + ".txt");
             std::ofstream p_file(results_path + "p_" + std::to_string(current_step) + ".txt");
             if (v_file.is_open()) {
