@@ -2,7 +2,6 @@
 #include <memory>
 #include <vector>
 #include <utility>
-#include <Eigen/Dense>
 #include <unsupported/Eigen/FFT>
 
 #include "mesh_utilities.hpp"
@@ -188,31 +187,22 @@ private:
         const VectorType& rInput,
         VectorType& rOutput)
     {
-        Eigen::Matrix<std::complex<double>, Eigen::Dynamic, 1> fft_b(mProblemSize);     // Complex array for FFT(x) output
-        Eigen::Matrix<std::complex<double>, Eigen::Dynamic, 1> b_complex(mProblemSize); // Complex array for FFT(x) input
+        std::vector<std::complex<double>> fft_b(mProblemSize);     // Complex array for FFT(x) output
+        std::vector<std::complex<double>> b_complex(mProblemSize); // Complex array for FFT(x) input
         for (unsigned int i = 0; i < mProblemSize; ++i) {
-            b_complex(i) = rInput[i];
+            b_complex[i].real(rInput[i]);
         }
 
         Eigen::FFT<double> fft;
-        Eigen::Matrix<std::complex<double>, Eigen::Dynamic, 1> sol(mProblemSize);
+        std::vector<std::complex<double>> sol(mProblemSize);
         fft.fwd(fft_b, b_complex);
         for (unsigned int i = 0; i < mProblemSize; ++i) {
-            fft_b(i) = fft_b(i) / mrFFTc[i];
+            fft_b[i] = fft_b[i] / mrFFTc[i];
         }
         fft.inv(sol, fft_b);
         for (unsigned int i = 0; i < mProblemSize; ++i) {
-            rOutput[i] = (sol.real())(i);
+            rOutput[i] = sol[i].real();
         }
-
-        // const auto& r_active_cells = mrPressureOperator.GetActiveCells();
-        // for (unsigned int i = 0; i < mProblemSize; ++i) {
-        //     if (r_active_cells[i]) {
-        //         rOutput[i] = (sol.real())(i);
-        //     } else {
-        //         rOutput[i] = 0.0;
-        //     }
-        // }
     }
 
 };
