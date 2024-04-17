@@ -1,4 +1,5 @@
 #include <Eigen/Dense>
+#include "include/experimental/mdspan"
 
 #pragma once
 
@@ -37,6 +38,17 @@ public:
     static void GetCellGradientOperator(
         const double a,
         const double b,
+        std::experimental::mdspan<double, std::experimental::extents<std::size_t, 4, 2>>& G);
+
+    static void GetCellGradientOperator(
+        const double a,
+        const double b,
         const double c,
         Eigen::Array<double, 8, 3>& G);
+
+    static void GetCellGradientOperator(
+        const double a,
+        const double b,
+        const double c,
+        std::experimental::mdspan<double, std::experimental::extents<std::size_t, 8, 3>>& G);
 };

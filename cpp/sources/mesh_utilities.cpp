@@ -35,11 +35,13 @@ template<int TDim>
 void MeshUtilities<TDim>::CalculateNodalCoordinates(
     const std::array<double, TDim>& rBoxSize,
     const std::array<int, TDim>& rBoxDivisions,
-    Eigen::Array<double, Eigen::Dynamic, TDim>& rNodalCoords)
+    MatrixViewType& rNodalCoords)
 {
-    // Allocate coordinates vector
+    // Check coordinates view extent
     const unsigned int num_nodes = std::get<0>(CalculateMeshData(rBoxDivisions));
-    rNodalCoords.resize(num_nodes, TDim);
+    if (rNodalCoords.extent(0) != num_nodes || rNodalCoords.extent(1) != TDim) {
+        throw std::logic_error("Wrong size in mdspan extent.");
+    }
 
     // Get mesh parameters
     const unsigned int n_x = rBoxDivisions[0] + 1;

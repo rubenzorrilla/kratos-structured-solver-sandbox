@@ -4,6 +4,7 @@
 #include "incompressible_navier_stokes_q1_p0_structured_element.hpp"
 #include "mesh_utilities.hpp"
 #include "sbm_utilities.hpp"
+#include "mdspan_utilities.hpp"
 
 template <>
 void SbmUtilities<2>::FindSurrogateBoundaryNodes(
@@ -153,26 +154,37 @@ void SbmUtilities<2>::UpdateSurrogateBoundaryDirichletValues(
     const std::vector<bool> &rSurrogateCells,
     const std::vector<bool> &rSurrogateNodes,
     const Eigen::Array<double, Eigen::Dynamic, 2> &rLumpedMassVector,
-    const Eigen::Array<double, Eigen::Dynamic, 2> &rDistanceVects,
-    const Eigen::Array<double, Eigen::Dynamic, 2> &rVelocity,
-    Eigen::Array<double, Eigen::Dynamic, 2> &rSurrogateVelocity)
+    const MatrixViewType &rDistanceVects,
+    const MatrixViewType &rVelocity,
+    MatrixViewType &rSurrogateVelocity)
 {
-    // Resize and initialize surrogate boundary velocity array
+    // Check surrogate boundary velocity array (i.e. mdspan extent)
     const int num_nodes = std::get<0>(MeshUtilities<2>::CalculateMeshData(rBoxDivisions));
-    if (rSurrogateVelocity.rows() != num_nodes) {
-        rSurrogateVelocity.resize(num_nodes, 2);
+    if (rSurrogateVelocity.extent(0) != num_nodes || rSurrogateVelocity.extent(1) != 2) {
+        throw std::logic_error("Wrong size in mdspan extent.");
     }
-    rSurrogateVelocity.setZero();
+
+    // Initialize surrogate boundary velocity array
+    for (unsigned int i = 0; i < rSurrogateVelocity.extent(0); ++i) {
+        rSurrogateVelocity(i, 0) = 0.0;
+        rSurrogateVelocity(i, 1) = 0.0;
+    }
 
     // Get cell gradient operator
-    Eigen::Array<double, 4, 2> cell_gradient_operator;
+    std::array<double, 8> cell_gradient_operator_data;
+    NodesDimViewType cell_gradient_operator(cell_gradient_operator_data.data(), 4, 2);
     IncompressibleNavierStokesQ1P0StructuredElement::GetCellGradientOperator(rCellSize[0], rCellSize[1], cell_gradient_operator);
 
     // Loop cells
-    Eigen::Vector2d dir_bc;
-    Eigen::Matrix2d weighted_grad_v;
+    std::array<double, 4> weighted_grad_v_data;
+    DimDimViewType weighted_grad_v(weighted_grad_v_data.data());
+
+    std::array<double,2> dir_bc;
     std::array<int, 4> cell_node_ids;
-    Eigen::Matrix<double, 4, 2> cell_v;
+
+    std::array<double, 8> cell_v_data;
+    NodesDimViewType cell_v(cell_v_data.data());
+
     for (unsigned int i = 0; i < rBoxDivisions[1]; ++i) {
         for (unsigned int j = 0; j < rBoxDivisions[0]; ++j) {
             // Check if current cell is attached to the surrogate boundary
@@ -183,16 +195,29 @@ void SbmUtilities<2>::UpdateSurrogateBoundaryDirichletValues(
                 // Get current cell velocities and calculate the weighted gradient
                 unsigned int aux_i = 0;
                 for (int node_id : cell_node_ids) {
-                    cell_v(aux_i, Eigen::all) = rVelocity.row(node_id);
+                    for (int d = 0; d < 2; ++d) {
+                        cell_v(aux_i, d) = rVelocity(node_id, d);
+                    }
                     aux_i++;
                 }
-                weighted_grad_v.noalias() = MassFactor * (cell_gradient_operator.matrix().transpose() * cell_v);
+                MdspanUtilities::TransposeMult(MassFactor, cell_gradient_operator, cell_v, weighted_grad_v);
 
                 // Calculate the Dirichlet velocity value in the surrogate boundary nodes
                 for (int node_id : cell_node_ids) {
                     if (rSurrogateNodes[node_id]) {
-                        dir_bc.noalias() = weighted_grad_v * (rDistanceVects.row(node_id).transpose()).matrix();
-                        rSurrogateVelocity.row(node_id) -= (dir_bc.transpose().array() / rLumpedMassVector.row(node_id));
+                        // Calculate the gradient times distance vector
+                        for (unsigned int d1 = 0; d1 < 2; ++d1) {
+                            dir_bc[d1] = 0.0;
+                            for (unsigned int d2 = 0; d2 < 2; ++d2) {
+                                dir_bc[d1] += weighted_grad_v(d1, d2) * rDistanceVects(node_id, d2);
+                            }
+                            dir_bc[d1] /= rLumpedMassVector.row(node_id)[d1];
+                        }
+
+                        // Assemble current cell contribution to surrogate boundary nodes
+                        for (unsigned int d = 0; d < 2; ++d) {
+                            rSurrogateVelocity(node_id, d) -= dir_bc[d];
+                        }
                     }
                 }
             }
@@ -208,26 +233,38 @@ void SbmUtilities<3>::UpdateSurrogateBoundaryDirichletValues(
     const std::vector<bool> &rSurrogateCells,
     const std::vector<bool> &rSurrogateNodes,
     const Eigen::Array<double, Eigen::Dynamic, 3> &rLumpedMassVector,
-    const Eigen::Array<double, Eigen::Dynamic, 3> &rDistanceVects,
-    const Eigen::Array<double, Eigen::Dynamic, 3> &rVelocity,
-    Eigen::Array<double, Eigen::Dynamic, 3> &rSurrogateVelocity)
+    const MatrixViewType &rDistanceVects,
+    const MatrixViewType &rVelocity,
+    MatrixViewType &rSurrogateVelocity)
 {
-// Resize and initialize surrogate boundary velocity array
+    // Check surrogate boundary velocity array (i.e. mdspan extent)
     const int num_nodes = std::get<0>(MeshUtilities<3>::CalculateMeshData(rBoxDivisions));
-    if (rSurrogateVelocity.rows() != num_nodes) {
-        rSurrogateVelocity.resize(num_nodes, 2);
+    if (rSurrogateVelocity.extent(0) != num_nodes || rSurrogateVelocity.extent(1) != 3) {
+        throw std::logic_error("Wrong size in mdspan extent.");
     }
-    rSurrogateVelocity.setZero();
+
+    // Initialize surrogate boundary velocity array
+    for (unsigned int i = 0; i < rSurrogateVelocity.extent(0); ++i) {
+        rSurrogateVelocity(i, 0) = 0.0;
+        rSurrogateVelocity(i, 1) = 0.0;
+        rSurrogateVelocity(i, 2) = 0.0;
+    }
 
     // Get cell gradient operator
-    Eigen::Array<double, 8, 3> cell_gradient_operator;
+    std::array<double, 24> cell_gradient_operator_data;
+    NodesDimViewType cell_gradient_operator(cell_gradient_operator_data.data(), 8, 3);
     IncompressibleNavierStokesQ1P0StructuredElement::GetCellGradientOperator(rCellSize[0], rCellSize[1], rCellSize[2], cell_gradient_operator);
 
     // Loop cells
-    Eigen::Vector3d dir_bc;
-    Eigen::Matrix3d weighted_grad_v;
+    std::array<double, 9> weighted_grad_v_data;
+    DimDimViewType weighted_grad_v(weighted_grad_v_data.data());
+
+    std::array<double,3> dir_bc;
     std::array<int, 8> cell_node_ids;
-    Eigen::Matrix<double, 8, 3> cell_v;
+
+    std::array<double, 24> cell_v_data;
+    NodesDimViewType cell_v(cell_v_data.data());
+
     for (unsigned int i = 0; i < rBoxDivisions[1]; ++i) {
         for (unsigned int j = 0; j < rBoxDivisions[0]; ++j) {
             for (unsigned int k = 0; k < rBoxDivisions[2]; ++k) {
@@ -239,16 +276,29 @@ void SbmUtilities<3>::UpdateSurrogateBoundaryDirichletValues(
                     // Get current cell velocities and calculate the weighted gradient
                     unsigned int aux_i = 0;
                     for (int node_id : cell_node_ids) {
-                        cell_v(aux_i, Eigen::all) = rVelocity.row(node_id);
+                        for (int d = 0; d < 3; ++d) {
+                            cell_v(aux_i, d) = rVelocity(node_id, d);
+                        }
                         aux_i++;
                     }
-                    weighted_grad_v.noalias() = MassFactor * (cell_gradient_operator.matrix().transpose() * cell_v);
+                    MdspanUtilities::TransposeMult(MassFactor, cell_gradient_operator, cell_v, weighted_grad_v);
 
                     // Calculate the Dirichlet velocity value in the surrogate boundary nodes
                     for (int node_id : cell_node_ids) {
                         if (rSurrogateNodes[node_id]) {
-                            dir_bc.noalias() = weighted_grad_v * (rDistanceVects.row(node_id).transpose()).matrix();
-                            rSurrogateVelocity.row(node_id) -= (dir_bc.transpose().array() / rLumpedMassVector.row(node_id));
+                            // Calculate the gradient times distance vector
+                            for (unsigned int d1 = 0; d1 < 3; ++d1) {
+                                dir_bc[d1] = 0.0;
+                                for (unsigned int d2 = 0; d2 < 3; ++d2) {
+                                    dir_bc[d1] += weighted_grad_v(d1, d2) * rDistanceVects(node_id, d2);
+                                }
+                                dir_bc[d1] /= rLumpedMassVector.row(node_id)[d1];
+                            }
+
+                            // Assemble current cell contribution to surrogate boundary nodes
+                            for (unsigned int d = 0; d < 3; ++d) {
+                                rSurrogateVelocity(node_id, d) -= dir_bc[d];
+                            }
                         }
                     }
                 }

@@ -23,9 +23,15 @@
 
 int main()
 {
-    // Problem data
+    // Problem static data
     static constexpr int dim = 2;
     static constexpr int cell_nodes = dim == 2 ? 4 : 8;
+
+    // Types definition
+    //TODO: Find a better way to define these
+    using MatrixViewType = Operators<dim>::MatrixViewType;
+
+    // Problem data
     const double end_time = 4.5e1;
     const double init_time = 0.0;
 
@@ -35,8 +41,7 @@ int main()
 
     // Input mesh data
     const std::array<double, dim> box_size({5.0, 1.0});
-    const std::array<int, dim> box_divisions({1500, 300});
-    // const std::array<int, dim> box_divisions({3, 3});
+    const std::array<int, dim> box_divisions({150, 30});
 
     // Compute mesh data
     auto mesh_data = MeshUtilities<dim>::CalculateMeshData(box_divisions);
@@ -69,7 +74,7 @@ int main()
     }
     std::cout << "Writing results to: " << results_path << std::endl;
 
-    const unsigned int output_interval = 100;
+    const unsigned int output_interval = 1;
     std::cout << "Writing interval: " << output_interval << std::endl;
 
     // Purge previous output
@@ -89,18 +94,18 @@ int main()
     }
 
     // Create mesh nodes (only used for fixity and visualization)
-    Eigen::Array<double, Eigen::Dynamic, dim> nodal_coords;
+    std::vector<double> nodal_coords_data(num_nodes * dim);
+    MatrixViewType nodal_coords(nodal_coords_data.data(), num_nodes, dim);
     MeshUtilities<dim>::CalculateNodalCoordinates(box_size, box_divisions, nodal_coords);
 
     // Write coordinates and connectivities for postprocess
     std::ofstream coordinates_file(results_path + "coordinates.txt");
     if (coordinates_file.is_open()) {
         for (unsigned int i = 0; i < num_nodes; ++i) {
-            const auto& r_coords = nodal_coords.row(i);
             if constexpr (dim == 2) {
-                coordinates_file << r_coords(0) << " " << r_coords(1) << " " << 0.0 << std::endl;
+                coordinates_file << nodal_coords(i, 0) << " " << nodal_coords(i, 1) << " " << 0.0 << std::endl;
             } else {
-                coordinates_file << r_coords(0) << " " << r_coords(1) << " " << r_coords(2) << std::endl;
+                coordinates_file << nodal_coords(i, 0) << " " << nodal_coords(i, 1) << " " << nodal_coords(i, 2) << std::endl;
             }
         }
     }
@@ -131,14 +136,16 @@ int main()
 
     // Create mesh dataset
     std::vector<double> p(num_cells, 0.0);
-    // Eigen::ArrayXXd f = Eigen::MatrixXd::Zero(num_nodes, dim);
     std::vector<double> f_data(num_nodes*dim, 0.0);
-    Eigen::ArrayXXd v = Eigen::MatrixXd::Zero(num_nodes, dim);
-    Eigen::ArrayXXd v_n = Eigen::MatrixXd::Zero(num_nodes, dim);
-    Eigen::ArrayXXd acc = Eigen::MatrixXd::Zero(num_nodes, dim);
+    std::vector<double> v_data(num_nodes*dim, 0.0);
+    std::vector<double> v_n_data(num_nodes*dim, 0.0);
+    std::vector<double> acc_data(num_nodes*dim, 0.0);
 
     // Create mdspan views of the above dataset
-    auto f = std::experimental::mdspan(f_data.data(), num_nodes, dim);
+    MatrixViewType f(f_data.data(), num_nodes, dim);
+    MatrixViewType v(v_data.data(), num_nodes, dim);
+    MatrixViewType v_n(v_n_data.data(), num_nodes, dim);
+    MatrixViewType acc(acc_data.data(), num_nodes, dim);
 
     // Set velocity fixity vector and BCs
     // Note that these overwrite the initial conditions above
@@ -147,13 +154,12 @@ int main()
 
     const double tol = 1.0e-6;
     for (unsigned int i_node = 0; i_node < num_nodes; ++i_node) {
-        const auto& r_coords = nodal_coords.row(i_node);
         // Inlet
-        if (r_coords[0] < tol) {
+        if (nodal_coords(i_node, 0) < tol) {
             fixity(i_node, 0) = true; // x-velocity
             fixity(i_node, 1) = true; // y-velocity
 
-            const double y_coord = r_coords(1);
+            const double y_coord = nodal_coords(i_node, 1);
 
             v(i_node, 0) = 6.0*y_coord*(1.0-y_coord);
             v_n(i_node, 0) = 6.0*y_coord*(1.0-y_coord);
@@ -168,28 +174,32 @@ int main()
         }
 
         // Top wall
-        if (r_coords[1] > (1.0-tol)) {
+        if (nodal_coords(i_node, 1) > (1.0-tol)) {
             fixity(i_node, 1) = true; // y-velocity
         }
 
         // Bottom wall
-        if (r_coords[1] < tol) {
+        if (nodal_coords(i_node, 1) < tol) {
             fixity(i_node, 1) = true; // y-velocity
         }
     }
 
     // Calculate the distance values
     const double cyl_rad = 0.1;
-    Eigen::Array<double, 1, dim> cyl_orig;
-    cyl_orig(0) = 1.25;
-    cyl_orig(1) = 0.5;
+    std::array<double, dim> cyl_orig;
+    cyl_orig[0] = 1.25;
+    cyl_orig[1] = 0.5;
 
+    std::array<double, dim> aux_coords;
     std::vector<double> distance(num_nodes);
     for (unsigned int i_node = 0; i_node < num_nodes; ++i_node) {
-        const auto& r_coords = nodal_coords.row(i_node);
-        const double dist = (r_coords - cyl_orig).matrix().norm();
+        double dist = 0.0;
+        for (unsigned int d = 0; d < dim; ++d) {
+            dist += std::pow(nodal_coords(i_node, d) - cyl_orig[d], 2);
+        }
+        dist = std::sqrt(dist);
         distance[i_node] = dist < cyl_rad ? - dist : dist;
-        // distance(i_node) = 1.0;
+        // distance[i_node] = 1.0;
         // distance(i_node) = r_coords[1] - 0.5;
     }
 
@@ -202,8 +212,8 @@ int main()
 
     // Define the surrogate boundary
     std::cout << "\n### SURROGATE BOUNDARY DEFINITION ###" << std::endl;
-    Eigen::Array<double, Eigen::Dynamic, dim> v_surrogate(num_nodes, dim);
-    v_surrogate.setZero();
+    std::vector<double> v_surrogate_data(num_nodes * dim);
+    SbmUtilities<dim>::MatrixViewType v_surrogate(v_surrogate_data.data(), num_nodes, dim);
 
     std::vector<bool> surrogate_nodes(num_nodes);
     SbmUtilities<dim>::FindSurrogateBoundaryNodes(box_divisions, distance, surrogate_nodes);
@@ -214,14 +224,19 @@ int main()
     std::cout << "Surrogate boundary cells found." << std::endl;
 
     // Calculate the distance vectors in the surrogate boundary nodes
-    Eigen::Vector<double, dim> aux_dir;
-    Eigen::Array<double, Eigen::Dynamic, dim> distance_vects(num_nodes, dim);
+    std::array<double, dim> aux_dir;
+    std::vector<double> distance_vects_data(num_nodes * dim, 0.0);
+    MatrixViewType distance_vects(distance_vects_data.data(), num_nodes, dim);
     for (unsigned int i_node = 0; i_node < num_nodes; ++i_node) {
         if (surrogate_nodes[i_node]) {
-            const auto& r_coords = nodal_coords.row(i_node);
-            aux_dir = cyl_orig - r_coords;
-            aux_dir /= aux_dir.norm();
-            distance_vects.row(i_node) = distance[i_node] * aux_dir;
+            for (unsigned int d = 0; d < dim; ++d) {
+                aux_dir[d] = cyl_orig[d] - nodal_coords(i_node, d);
+            }
+            const double aux_dir_norm = std::sqrt(std::inner_product(aux_dir.begin(), aux_dir.end(), aux_dir.begin(), 0.0));
+            for (unsigned int d = 0; d < dim; ++d) {
+                aux_dir[d] /= aux_dir_norm;
+                distance_vects(i_node, d) = distance[i_node] * aux_dir[d] / aux_dir_norm;
+            }
             // distance_vects(i_node, 0) = 0.0;
             // distance_vects(i_node, 1) = distance[i_node];
         }
@@ -367,7 +382,8 @@ int main()
     std::vector<double> delta_p_rhs(num_cells);
 
     // Allocate auxiliary arrays for the velocity update
-    Eigen::Matrix<double, Eigen::Dynamic, dim> delta_p_grad(num_nodes, dim);
+    std::vector<double> delta_p_grad_data(num_nodes * dim, 0.0);
+    MatrixViewType delta_p_grad(delta_p_grad_data.data(), num_nodes, dim);
 
     std::cout << "\n### PRESSURE SOLVER SET-UP ###" << std::endl;
     const double abs_tol = 1.0e-5;
@@ -390,11 +406,12 @@ int main()
 
         // Update the surrogate boundary Dirichlet value from the previous time step velocity gradient
         SbmUtilities<dim>::UpdateSurrogateBoundaryDirichletValues(mass_factor, box_divisions, cell_size, surrogate_cells, surrogate_nodes, lumped_mass_vector, distance_vects, v, v_surrogate);
-        //TODO: We can get rid of v_surrogate (but lets keep it for debugging for a while)
         for (unsigned int i = 0; i < num_nodes; ++i) {
             if (surrogate_nodes[i]) {
-                v(i, Eigen::all) = v_surrogate.row(i);
-                v_n(i, Eigen::all) = v_surrogate.row(i);
+                for (unsigned int d = 0; d < dim; ++d) {
+                    v(i, d) = v_surrogate(i, d);
+                    v_n(i, d) = v_surrogate(i, d);
+                }
             }
         }
 
@@ -413,7 +430,12 @@ int main()
                 rk_v += a_ij * rk_res[i_step];
             }
             rk_v *= dt * lumped_mass_vector_inv;
-            rk_v += v_n;
+
+            for (unsigned int i = 0; i < num_nodes; ++i) {
+                for (unsigned int d = 0; d < dim; ++d) {
+                    rk_v(i, d) += v_n(i, d);
+                }
+            }
 
             for (unsigned int i_dof = 0; i_dof < n_fixed_dofs; ++i_dof) {
                 const unsigned int dof_row = fixed_dofs_rows[i_dof];
@@ -436,11 +458,11 @@ int main()
                             CellUtilities::GetCellNodesGlobalIds(i, j, box_divisions, cell_node_ids);
                             const double cell_p = p[i_cell];
                             cell_v = rk_v(cell_node_ids, Eigen::all);
-                            cell_acc = acc(cell_node_ids, Eigen::all);
 
                             for (unsigned int i_node = 0; i_node < cell_nodes; ++i_node) {
                                 for (unsigned int d = 0; d < dim; ++d) {
                                     cell_f(i_node, d) = f(cell_node_ids[i_node], d);
+                                    cell_acc(i_node, d) = acc(cell_node_ids[i_node], d);
                                 }
                             }
 
@@ -509,7 +531,16 @@ int main()
             std::ofstream p_file(results_path + "p_" + std::to_string(current_step) + ".txt");
             if (v_file.is_open()) {
                 v_file << current_time << std::endl;
-                v_file << v.format(out_format);
+                for (unsigned int i = 0; i < num_nodes; ++i) {
+                    for (unsigned int d = 0; d < dim; ++d) {
+                        v_file << v(i,d);
+                        if (d < dim - 1) {
+                            v_file << ", ";
+                        } else {
+                            v_file << "\n";
+                        }
+                    }
+                }
                 v_file.close();
             }
             if (p_file.is_open()) {
@@ -523,8 +554,12 @@ int main()
         }
 
         // Update variables for next time step
-        acc = (v - v_n) / dt;
-        v_n = v;
+        for (unsigned int i = 0; i < num_nodes; ++i) {
+            for (unsigned int d = 0; d < dim; ++d) {
+                acc(i, d) = (v(i, d) - v_n(i, d)) / dt;
+                v_n(i, d) = v(i, d);
+            }
+        }
         ++current_step;
         current_time += dt;
     }
