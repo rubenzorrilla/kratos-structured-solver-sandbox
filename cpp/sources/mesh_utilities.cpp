@@ -149,14 +149,26 @@ void MeshUtilities<3>::CalculateLumpedMassVector(
 template <>
 std::tuple<bool, unsigned int> MeshUtilities<2>::FindFirstFreeCellId(
     const std::array<int, 2> &rBoxDivisions,
-    const Eigen::Array<bool, Eigen::Dynamic, 2>& rFixity)
+    const FixityMatrixViewType& rFixity)
 {
-    std::array<int, 4> cell_node_ids;
+    std::array<int, cell_nodes> cell_node_ids;
     for (unsigned int i = 0; i < rBoxDivisions[1]; ++i) {
         for (unsigned int j = 0; j < rBoxDivisions[0]; ++j) {
+            // Get current cell nodal ids
             CellUtilities::GetCellNodesGlobalIds(i, j, rBoxDivisions, cell_node_ids);
-            const auto cell_fixity = rFixity(cell_node_ids, Eigen::all);
-            if (!cell_fixity.any()) {
+
+            // Get the number of free DOFs in current cell
+            unsigned int n_free_dofs = 0;
+            for (unsigned int node_id : cell_node_ids) {
+                for (unsigned int d = 0; d < 2; ++d) {
+                    if (!rFixity(node_id, d)) {
+                        n_free_dofs++;
+                    }
+                }
+            }
+
+            // Check if the number of free DOFs matches the total number of DOFs in the cell
+            if (n_free_dofs == cell_dofs) {
                 return std::make_tuple(true, CellUtilities::GetCellGlobalId(i, j, rBoxDivisions));
             }
         }
@@ -168,15 +180,27 @@ std::tuple<bool, unsigned int> MeshUtilities<2>::FindFirstFreeCellId(
 template <>
 std::tuple<bool, unsigned int> MeshUtilities<3>::FindFirstFreeCellId(
     const std::array<int, 3> &rBoxDivisions,
-    const Eigen::Array<bool, Eigen::Dynamic, 3>& rFixity)
+    const FixityMatrixViewType& rFixity)
 {
-    std::array<int, 8> cell_node_ids;
+    std::array<int, cell_nodes> cell_node_ids;
     for (unsigned int i = 0; i < rBoxDivisions[1]; ++i) {
         for (unsigned int j = 0; j < rBoxDivisions[0]; ++j) {
             for (unsigned int k = 0; k < rBoxDivisions[2]; ++k) {
+                // Get current cell nodal ids
                 CellUtilities::GetCellNodesGlobalIds(i, j, k, rBoxDivisions, cell_node_ids);
-                const auto cell_fixity = rFixity(cell_node_ids, Eigen::all);
-                if (!cell_fixity.any()) {
+
+                // Get the number of free DOFs in current cell
+                unsigned int n_free_dofs = 0;
+                for (unsigned int node_id : cell_node_ids) {
+                    for (unsigned int d = 0; d < 2; ++d) {
+                        if (!rFixity(node_id, d)) {
+                            n_free_dofs++;
+                        }
+                    }
+                }
+
+                // Check if the number of free DOFs matches the total number of DOFs in the cell
+                if (n_free_dofs == cell_dofs) {
                     return std::make_tuple(true, CellUtilities::GetCellGlobalId(i, j, k, rBoxDivisions));
                 }
             }

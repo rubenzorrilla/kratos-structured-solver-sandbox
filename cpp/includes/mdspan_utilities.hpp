@@ -9,6 +9,16 @@ class MdspanUtilities
 {
 public:
 
+    template<class TInput1>
+    static void SetZero(TInput1& rA)
+    {
+        for (typename TInput1::index_type i = 0; i < rA.extent(0); ++i) {
+            for (typename TInput1::index_type j = 0; j < rA.extent(1); ++j) {
+                rA(i, j) = typename TInput1::value_type();
+            }
+        }
+    }
+
     template<class TInput1, class TInput2, class TOutput>
     static void Mult(
         const TInput1& rA,

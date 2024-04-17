@@ -12,9 +12,15 @@ class MeshUtilities
 {
 public:
 
+    static constexpr std::size_t cell_nodes = TDim == 2 ? 4 : 8;
+
+    static constexpr std::size_t cell_dofs = cell_nodes * TDim;
+
     using ExtentsType = std::experimental::extents<std::size_t, std::dynamic_extent, TDim>;
 
     using MatrixViewType = std::experimental::mdspan<double, ExtentsType>;
+
+    using FixityMatrixViewType = std::experimental::mdspan<bool, ExtentsType>;
 
     static std::pair<unsigned int, unsigned int> CalculateMeshData(const std::array<int, TDim>& rBoxDivisions);
 
@@ -35,5 +41,5 @@ public:
 
     static std::tuple<bool, unsigned int> FindFirstFreeCellId(
         const std::array<int, TDim> &rBoxDivisions,
-        const Eigen::Array<bool, Eigen::Dynamic, TDim>& rFixity);
+        const FixityMatrixViewType& rFixity);
 };

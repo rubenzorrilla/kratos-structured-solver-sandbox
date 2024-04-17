@@ -1,5 +1,6 @@
 #include <iostream>
 
+#include "mdspan_utilities.hpp"
 #include "runge_kutta_utilities.hpp"
 
 template<>
@@ -21,9 +22,9 @@ void RungeKuttaUtilities<4>::SetWeightsVector(std::array<double, 4>& rWeighsVect
 }
 
 template <>
-void RungeKuttaUtilities<4>::SetRungeKuttaMatrix(Eigen::Array<double, 4, 4>& rRungeKuttaMatrix)
+void RungeKuttaUtilities<4>::SetRungeKuttaMatrix(RungeKuttaMatrixView& rRungeKuttaMatrix)
 {
-    rRungeKuttaMatrix.setZero();
+    MdspanUtilities::SetZero(rRungeKuttaMatrix);
     rRungeKuttaMatrix(1, 0) = 0.5;
     rRungeKuttaMatrix(2, 1) = 0.5;
     rRungeKuttaMatrix(3, 2) = 1.0;

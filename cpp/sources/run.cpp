@@ -14,6 +14,7 @@
 
 #include "cell_utilities.hpp"
 #include "incompressible_navier_stokes_q1_p0_structured_element.hpp"
+#include "mdspan_utilities.hpp"
 #include "mesh_utilities.hpp"
 #include "operators.hpp"
 #include "pressure_conjugate_gradient_solver.hpp"
@@ -149,8 +150,9 @@ int main()
 
     // Set velocity fixity vector and BCs
     // Note that these overwrite the initial conditions above
-    Eigen::Array<bool, Eigen::Dynamic, dim> fixity(num_nodes, dim);
-    fixity.setZero();
+    bool fixity_data[num_nodes*dim];
+    std::experimental::mdspan<bool, std::experimental::extents<std::size_t, std::dynamic_extent, dim>> fixity(fixity_data, num_nodes, dim);
+    MdspanUtilities::SetZero(fixity);
 
     const double tol = 1.0e-6;
     for (unsigned int i_node = 0; i_node < num_nodes; ++i_node) {
@@ -243,29 +245,49 @@ int main()
     }
     std::cout << "Surrogate boundary nodes distance vectors computed." << std::endl;
 
+    //TODO: The two loops below can be condensed in one
     // Apply fixity in the interior nodes
     for (unsigned int i_node = 0; i_node < num_nodes; ++i_node) {
         if (distance[i_node] < 0.0) {
-            fixity.row(i_node).setConstant(true);
+            for (unsigned int d = 0; d < dim; ++d) {
+                fixity(i_node, d) = true;
+            }
         }
     }
 
     // Apply fixity in the surrogate boundary nodes
     for (unsigned int i_node = 0; i_node < num_nodes; ++i_node) {
         if (surrogate_nodes[i_node]) {
-            fixity.row(i_node).setConstant(true);
+            for (unsigned int d = 0; d < dim; ++d) {
+                fixity(i_node, d) = true;
+            }
         }
     }
 
     // Deactivate the interior and intersected cells (SBM-like resolution)
+    std::array<int,cell_nodes> cell_node_ids;
     std::vector<bool> active_cells(num_cells);
     if constexpr (dim == 2) {
-        std::array<int,4> cell_node_ids;
         for (unsigned int i = 0; i < box_divisions[1]; ++i) {
             for (unsigned int j = 0; j < box_divisions[0]; ++j) {
+                // Get current cell nodal ids
                 CellUtilities::GetCellNodesGlobalIds(i, j, box_divisions, cell_node_ids);
-                const auto cell_fixity = fixity(cell_node_ids, Eigen::all);
-                active_cells[CellUtilities::GetCellGlobalId(i, j, box_divisions)] = !cell_fixity.all();
+
+                // Check fixity of current cell nodes
+                // Note that we consider a cell active as soon as one of its DOFs is free
+                bool is_active = false;
+                for (unsigned int node_id : cell_node_ids) {
+                    for (unsigned int d = 0; d < dim; ++d) {
+                        if (!fixity(node_id, d)) {
+                            is_active = true;
+                            goto cell_activation_label;
+                        }
+                    }
+                }
+
+                // Deactivate the cell if all the nodal DOFs are fixed
+                cell_activation_label:
+                active_cells[CellUtilities::GetCellGlobalId(i, j, box_divisions)] = is_active;
             }
         }
     } else {
@@ -285,8 +307,8 @@ int main()
     std::vector<unsigned int> free_dofs_cols;
     std::vector<unsigned int> fixed_dofs_rows;
     std::vector<unsigned int> fixed_dofs_cols;
-    for (unsigned int i_row = 0; i_row < fixity.rows(); ++i_row) {
-        for (unsigned int j_col = 0; j_col < fixity.cols(); ++j_col) {
+    for (unsigned int i_row = 0; i_row < fixity.extent(0); ++i_row) {
+        for (unsigned int j_col = 0; j_col < fixity.extent(1); ++j_col) {
             if (fixity(i_row, j_col)) {
                 fixed_dofs_rows.push_back(i_row);
                 fixed_dofs_cols.push_back(j_col);
@@ -362,9 +384,10 @@ int main()
 
     // Set Runge-Kutta arrays
     constexpr int rk_order = 4;
-    std::array<double, rk_order> rk_B;
-    std::array<double, rk_order> rk_C;
-    Eigen::Array<double, rk_order, rk_order> rk_A;
+    RungeKuttaUtilities<rk_order>::RungeKuttaVector rk_B;
+    RungeKuttaUtilities<rk_order>::RungeKuttaVector rk_C;
+    std::array<double, rk_order * rk_order> rk_A_data;
+    RungeKuttaUtilities<rk_order>::RungeKuttaMatrixView rk_A(rk_A_data.data());
     RungeKuttaUtilities<rk_order>::SetNodesVector(rk_C);
     RungeKuttaUtilities<rk_order>::SetWeightsVector(rk_B);
     RungeKuttaUtilities<rk_order>::SetRungeKuttaMatrix(rk_A);
