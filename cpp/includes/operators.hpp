@@ -48,4 +48,12 @@ public:
         const Eigen::Array<double, Eigen::Dynamic, TDim>& rLumpedMassVectorInv,
         const std::vector<double>& rX,
         std::vector<double>& rOutput);
+
+    static void ApplyPressureOperator(
+        const std::array<int, TDim>& rBoxDivisions,
+        const std::array<double, TDim>& rCellSize,
+        const std::vector<bool>& rActiveCells,
+        const MatrixViewType& rLumpedMassVectorInv,
+        const std::vector<double>& rX,
+        std::vector<double>& rOutput);
 };

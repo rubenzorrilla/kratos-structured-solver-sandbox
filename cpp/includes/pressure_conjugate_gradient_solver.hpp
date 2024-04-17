@@ -204,6 +204,15 @@ private:
         for (unsigned int i = 0; i < mProblemSize; ++i) {
             rOutput[i] = (sol.real())(i);
         }
+
+        // const auto& r_active_cells = mrPressureOperator.GetActiveCells();
+        // for (unsigned int i = 0; i < mProblemSize; ++i) {
+        //     if (r_active_cells[i]) {
+        //         rOutput[i] = (sol.real())(i);
+        //     } else {
+        //         rOutput[i] = 0.0;
+        //     }
+        // }
     }
 
 };

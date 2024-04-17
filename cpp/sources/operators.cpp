@@ -339,5 +339,26 @@ void Operators<TDim>::ApplyPressureOperator(
     ApplyDivergenceOperator(rBoxDivisions, rCellSize, rActiveCells, aux, rOutput);
 }
 
+template<int TDim>
+void Operators<TDim>::ApplyPressureOperator(
+    const std::array<int, TDim>& rBoxDivisions,
+    const std::array<double, TDim>& rCellSize,
+    const std::vector<bool>& rActiveCells,
+    const MatrixViewType& rLumpedMassVectorInv,
+    const std::vector<double>& rX,
+    std::vector<double>& rOutput)
+{
+    const unsigned int n_nodes = std::get<0>(MeshUtilities<TDim>::CalculateMeshData(rBoxDivisions));
+    double aux_data[n_nodes * TDim];
+    MatrixViewType aux(aux_data, n_nodes, TDim);
+    ApplyGradientOperator(rBoxDivisions, rCellSize, rActiveCells, rX, aux);
+    for (unsigned int i = 0; i < aux.extent(0); ++i) {
+        for (unsigned int j = 0; j < aux.extent(1); ++j) {
+            aux(i, j) *= rLumpedMassVectorInv(i, j);
+        }
+    }
+    ApplyDivergenceOperator(rBoxDivisions, rCellSize, rActiveCells, aux, rOutput);
+}
+
 template class Operators<2>;
 template class Operators<3>;

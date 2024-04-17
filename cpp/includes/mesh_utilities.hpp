@@ -39,6 +39,12 @@ public:
         const std::vector<bool>& rActiveCells,
         Eigen::Array<double, Eigen::Dynamic, TDim>& rLumpedMassVector);
 
+    static void CalculateLumpedMassVector(
+        const double MassFactor,
+        const std::array<int, TDim>& rBoxDivisions,
+        const std::vector<bool>& rActiveCells,
+        MatrixViewType& rLumpedMassVector);
+
     static std::tuple<bool, unsigned int> FindFirstFreeCellId(
         const std::array<int, TDim> &rBoxDivisions,
         const FixityMatrixViewType& rFixity);

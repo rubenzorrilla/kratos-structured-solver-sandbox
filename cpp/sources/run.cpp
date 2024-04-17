@@ -75,7 +75,7 @@ int main()
     }
     std::cout << "Writing results to: " << results_path << std::endl;
 
-    const unsigned int output_interval = 1;
+    const unsigned int output_interval = 100;
     std::cout << "Writing interval: " << output_interval << std::endl;
 
     // Purge previous output
@@ -324,19 +324,25 @@ int main()
     // Calculate lumped mass vector
     const double cell_domain_size = CellUtilities::GetCellDomainSize(cell_size);
     const double mass_factor = rho * cell_domain_size / (dim == 2 ? 4.0 : 8.0);
-    Eigen::Array<double, Eigen::Dynamic, dim> lumped_mass_vector(num_nodes, dim);
+    double lumped_mass_data[num_nodes * dim];
+    MatrixViewType lumped_mass_vector(lumped_mass_data, num_nodes, dim);
     MeshUtilities<dim>::CalculateLumpedMassVector(mass_factor, box_divisions, active_cells, lumped_mass_vector);
 
     // Calculate inverse of the lumped mass vector
-    Eigen::Array<double, Eigen::Dynamic, dim> lumped_mass_vector_inv(num_nodes, dim);
+    double lumped_mass_inv_data[num_nodes * dim];
+    MatrixViewType lumped_mass_vector_inv(lumped_mass_inv_data, num_nodes, dim);
     for (unsigned int i_node = 0; i_node < num_nodes; ++i_node) {
-        if (lumped_mass_vector(i_node, 0) > 0.0) {
-            lumped_mass_vector_inv(i_node, Eigen::all) = 1.0 / lumped_mass_vector(i_node, 0);
-        } else {
-            lumped_mass_vector_inv(i_node, Eigen::all) = 0.0;
+        for (unsigned int d = 0; d < dim; ++d) {
+            if (lumped_mass_vector(i_node, d) > 0.0) {
+                lumped_mass_vector_inv(i_node, d) = 1.0 / lumped_mass_vector(i_node, d);
+            } else {
+                lumped_mass_vector_inv(i_node, d) = 0.0;
+            }
         }
     }
-    Eigen::Array<double, Eigen::Dynamic, dim> lumped_mass_vector_inv_bcs = lumped_mass_vector_inv;
+
+    double* lumped_mass_inv_bcs_data = lumped_mass_inv_data;
+    MatrixViewType lumped_mass_vector_inv_bcs(lumped_mass_inv_bcs_data, num_nodes, dim);
     for (unsigned int i_dof = 0; i_dof < n_fixed_dofs; ++i_dof) {
         lumped_mass_vector_inv_bcs(fixed_dofs_rows[i_dof], fixed_dofs_cols[i_dof]) = 0.0;
     }
@@ -394,7 +400,9 @@ int main()
 
     // Allocate auxiliary arrays for the velocity problem
     constexpr int rk_num_steps = rk_order;
-    Eigen::Array<double, Eigen::Dynamic, dim> rk_v(num_nodes, dim);
+    double rk_v_data[num_nodes * dim];
+    MatrixViewType rk_v(rk_v_data, num_nodes, dim);
+    // Eigen::Array<double, Eigen::Dynamic, dim> rk_v(num_nodes, dim);
     std::array<Eigen::Array<double, Eigen::Dynamic, dim>, rk_num_steps> rk_res;
     for (auto& r_arr : rk_res) {
         r_arr.resize(num_nodes, dim);
@@ -447,19 +455,24 @@ int main()
             // Calculate current step velocity for residual calculation
             const double rk_theta = rk_C[rk_step];
             const double rk_step_time = current_time + rk_theta * dt;
-            rk_v.setZero();
+            MdspanUtilities::SetZero(rk_v);
             for (unsigned int i_step = 0; i_step < rk_step; ++i_step) {
                 const double a_ij = rk_A(rk_step, i_step);
-                rk_v += a_ij * rk_res[i_step];
+                for (unsigned int i = 0; i < num_nodes; ++i) {
+                    for (unsigned int d = 0; d < dim; ++d) {
+                        rk_v(i, d) += a_ij * rk_res[i_step](i, d);
+                    }
+                }
             }
-            rk_v *= dt * lumped_mass_vector_inv;
 
             for (unsigned int i = 0; i < num_nodes; ++i) {
                 for (unsigned int d = 0; d < dim; ++d) {
+                    rk_v(i, d) *= dt * lumped_mass_vector_inv(i, d);
                     rk_v(i, d) += v_n(i, d);
                 }
             }
 
+            //TODO: I think we can do this in the look above (check fixity for each DOF)
             for (unsigned int i_dof = 0; i_dof < n_fixed_dofs; ++i_dof) {
                 const unsigned int dof_row = fixed_dofs_rows[i_dof];
                 const unsigned int dof_col = fixed_dofs_cols[i_dof];
@@ -480,11 +493,11 @@ int main()
                             // Get current cell data
                             CellUtilities::GetCellNodesGlobalIds(i, j, box_divisions, cell_node_ids);
                             const double cell_p = p[i_cell];
-                            cell_v = rk_v(cell_node_ids, Eigen::all);
 
                             for (unsigned int i_node = 0; i_node < cell_nodes; ++i_node) {
                                 for (unsigned int d = 0; d < dim; ++d) {
                                     cell_f(i_node, d) = f(cell_node_ids[i_node], d);
+                                    cell_v(i_node, d) = rk_v(cell_node_ids[i_node], d);
                                     cell_acc(i_node, d) = acc(cell_node_ids[i_node], d);
                                 }
                             }

@@ -1,7 +1,8 @@
 #include <array>
 #include <utility>
 #include <vector>
-#include <Eigen/Dense>
+
+#include "include/experimental/mdspan"
 
 #pragma once
 
@@ -41,7 +42,7 @@ public:
         const std::array<double, TDim> &rCellSize,
         const std::vector<bool> &rSurrogateCells,
         const std::vector<bool> &rSurrogateNodes,
-        const Eigen::Array<double, Eigen::Dynamic, TDim> &rLumpedMassVector,
+        const MatrixViewType &rLumpedMassVector,
         const MatrixViewType &rDistanceVects,
         const MatrixViewType &rVelocity,
         MatrixViewType &rSurrogateVelocity);

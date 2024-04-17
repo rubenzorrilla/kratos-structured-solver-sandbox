@@ -153,7 +153,7 @@ void SbmUtilities<2>::UpdateSurrogateBoundaryDirichletValues(
     const std::array<double, 2> &rCellSize,
     const std::vector<bool> &rSurrogateCells,
     const std::vector<bool> &rSurrogateNodes,
-    const Eigen::Array<double, Eigen::Dynamic, 2> &rLumpedMassVector,
+    const MatrixViewType &rLumpedMassVector,
     const MatrixViewType &rDistanceVects,
     const MatrixViewType &rVelocity,
     MatrixViewType &rSurrogateVelocity)
@@ -211,7 +211,7 @@ void SbmUtilities<2>::UpdateSurrogateBoundaryDirichletValues(
                             for (unsigned int d2 = 0; d2 < 2; ++d2) {
                                 dir_bc[d1] += weighted_grad_v(d1, d2) * rDistanceVects(node_id, d2);
                             }
-                            dir_bc[d1] /= rLumpedMassVector.row(node_id)[d1];
+                            dir_bc[d1] /= rLumpedMassVector(node_id, d1);
                         }
 
                         // Assemble current cell contribution to surrogate boundary nodes
@@ -232,7 +232,7 @@ void SbmUtilities<3>::UpdateSurrogateBoundaryDirichletValues(
     const std::array<double, 3> &rCellSize,
     const std::vector<bool> &rSurrogateCells,
     const std::vector<bool> &rSurrogateNodes,
-    const Eigen::Array<double, Eigen::Dynamic, 3> &rLumpedMassVector,
+    const MatrixViewType &rLumpedMassVector,
     const MatrixViewType &rDistanceVects,
     const MatrixViewType &rVelocity,
     MatrixViewType &rSurrogateVelocity)
@@ -292,7 +292,7 @@ void SbmUtilities<3>::UpdateSurrogateBoundaryDirichletValues(
                                 for (unsigned int d2 = 0; d2 < 3; ++d2) {
                                     dir_bc[d1] += weighted_grad_v(d1, d2) * rDistanceVects(node_id, d2);
                                 }
-                                dir_bc[d1] /= rLumpedMassVector.row(node_id)[d1];
+                                dir_bc[d1] /= rLumpedMassVector(node_id, d1);
                             }
 
                             // Assemble current cell contribution to surrogate boundary nodes

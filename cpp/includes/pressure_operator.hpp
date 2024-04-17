@@ -1,5 +1,4 @@
 #include <array>
-#include <Eigen/Dense>
 
 #include "mesh_utilities.hpp"
 #include "operators.hpp"
@@ -13,7 +12,7 @@ public:
 
     using VectorType = std::vector<double>;
 
-    using MatrixType = Eigen::Array<double, Eigen::Dynamic, TDim>;
+    using MatrixViewType = Operators<TDim>::MatrixViewType;
 
     PressureOperator() = default;
 
@@ -21,7 +20,7 @@ public:
         const std::array<int, TDim>& rBoxDivisions,
         const std::array<double, TDim>& rCellSize,
         const std::vector<bool>& rActiveCells,
-        const MatrixType& rLumpedMassVectorInv)
+        const MatrixViewType& rLumpedMassVectorInv)
         : mrCellSize(rCellSize)
         , mrBoxDivisions(rBoxDivisions)
         , mrActiveCells(rActiveCells)
@@ -34,9 +33,15 @@ public:
         const VectorType& rInput,
         VectorType& rOutput) const
     {
-        Eigen::Matrix<double, Eigen::Dynamic, TDim> aux;
+        const unsigned int n_nodes = std::get<0>(MeshUtilities<TDim>::CalculateMeshData(mrBoxDivisions));
+        double aux_data[n_nodes * TDim];
+        MatrixViewType aux(aux_data, n_nodes, TDim);
         Operators<TDim>::ApplyGradientOperator(mrBoxDivisions, mrCellSize, mrActiveCells, rInput, aux);
-        aux.array() *= mrLumpedMassVectorInv;
+        for (unsigned int i = 0; i < mrLumpedMassVectorInv.extent(0); ++i) {
+            for (unsigned int j = 0; j < mrLumpedMassVectorInv.extent(1); ++j) {
+                aux(i, j) *= mrLumpedMassVectorInv(i, j);
+            }
+        }
         Operators<TDim>::ApplyDivergenceOperator(mrBoxDivisions, mrCellSize, mrActiveCells, aux, rOutput);
     }
 
@@ -50,6 +55,11 @@ public:
         return std::get<1>(MeshUtilities<TDim>::CalculateMeshData(mrBoxDivisions));
     }
 
+    const std::vector<bool>& GetActiveCells() const
+    {
+        return mrActiveCells;
+    }
+
 private:
 
     bool mIsInitialized = false;
@@ -60,6 +70,6 @@ private:
 
     const std::vector<bool>& mrActiveCells;
 
-    const MatrixType& mrLumpedMassVectorInv;
+    const MatrixViewType& mrLumpedMassVectorInv;
 
 };
