@@ -103,6 +103,56 @@ template<>
 void MeshUtilities<2>::CalculateLumpedMassVector(
     const double MassFactor,
     const std::array<int, 2>& rBoxDivisions,
+    MatrixViewType& rLumpedMassVector)
+{
+    const unsigned int num_nodes = std::get<0>(CalculateMeshData(rBoxDivisions));
+    if (rLumpedMassVector.extent(0) != num_nodes || rLumpedMassVector.extent(1) != 2) {
+        throw std::logic_error("Wrong size in mdspan extent.");
+    }
+    MdspanUtilities::SetZero(rLumpedMassVector);
+    std::array<int, 4> cell_node_ids;
+    for (unsigned int i = 0; i < rBoxDivisions[1]; ++i) {
+        for (unsigned int j = 0; j < rBoxDivisions[0]; ++j) {
+            CellUtilities::GetCellNodesGlobalIds(i, j, rBoxDivisions, cell_node_ids);
+            for (unsigned int node_id : cell_node_ids) {
+                for (unsigned int d = 0; d < 2; ++d) {
+                    rLumpedMassVector(node_id, d) += MassFactor;
+                }
+            }
+        }
+    }
+}
+
+template<>
+void MeshUtilities<3>::CalculateLumpedMassVector(
+    const double MassFactor,
+    const std::array<int, 3>& rBoxDivisions,
+    MatrixViewType& rLumpedMassVector)
+{
+    const unsigned int num_nodes = std::get<0>(CalculateMeshData(rBoxDivisions));
+    if (rLumpedMassVector.extent(0) != num_nodes || rLumpedMassVector.extent(1) != 3) {
+        throw std::logic_error("Wrong size in mdspan extent.");
+    }
+    MdspanUtilities::SetZero(rLumpedMassVector);
+    std::array<int, 8> cell_node_ids;
+    for (unsigned int i = 0; i < rBoxDivisions[1]; ++i) {
+        for (unsigned int j = 0; j < rBoxDivisions[0]; ++j) {
+            for (unsigned int k = 0; k < rBoxDivisions[2]; ++k) {
+                CellUtilities::GetCellNodesGlobalIds(i, j, k, rBoxDivisions, cell_node_ids);
+                for (unsigned int node_id : cell_node_ids) {
+                    for (unsigned int d = 0; d < 3; ++d) {
+                        rLumpedMassVector(node_id, d) += MassFactor;
+                    }
+                }
+            }
+        }
+    }
+}
+
+template<>
+void MeshUtilities<2>::CalculateLumpedMassVector(
+    const double MassFactor,
+    const std::array<int, 2>& rBoxDivisions,
     const std::vector<bool>& rActiveCells,
     MatrixViewType& rLumpedMassVector)
 {

@@ -14,6 +14,12 @@ public:
     using MatrixViewType = std::experimental::mdspan<double, ExtentsType>;
 
     static void ApplyGradientOperator(
+        const std::array<int, TDim> &rBoxDivisions,
+        const std::array<double, TDim> &rCellSize,
+        const std::vector<double> &rX,
+        MatrixViewType &rOutput);
+
+    static void ApplyGradientOperator(
         const std::array<int, TDim>& rBoxDivisions,
         const std::array<double, TDim>& rCellSize,
         const std::vector<bool>& rActiveCells,
@@ -23,8 +29,21 @@ public:
     static void ApplyDivergenceOperator(
         const std::array<int, TDim>& rBoxDivisions,
         const std::array<double, TDim>& rCellSize,
+        const MatrixViewType& rX,
+        std::vector<double>& rOutput);
+
+    static void ApplyDivergenceOperator(
+        const std::array<int, TDim>& rBoxDivisions,
+        const std::array<double, TDim>& rCellSize,
         const std::vector<bool>& rActiveCells,
         const MatrixViewType& rX,
+        std::vector<double>& rOutput);
+
+    static void ApplyPressureOperator(
+        const std::array<int, TDim>& rBoxDivisions,
+        const std::array<double, TDim>& rCellSize,
+        const MatrixViewType& rLumpedMassVectorInv,
+        const std::vector<double>& rX,
         std::vector<double>& rOutput);
 
     static void ApplyPressureOperator(

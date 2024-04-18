@@ -35,6 +35,11 @@ public:
     static void CalculateLumpedMassVector(
         const double MassFactor,
         const std::array<int, TDim>& rBoxDivisions,
+        MatrixViewType& rLumpedMassVector);
+
+    static void CalculateLumpedMassVector(
+        const double MassFactor,
+        const std::array<int, TDim>& rBoxDivisions,
         const std::vector<bool>& rActiveCells,
         MatrixViewType& rLumpedMassVector);
 

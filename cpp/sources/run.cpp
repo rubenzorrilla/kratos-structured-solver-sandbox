@@ -32,7 +32,8 @@ int main()
     using MatrixViewType = Operators<dim>::MatrixViewType;
 
     // Problem data
-    const double end_time = 4.5e1;
+    // const double end_time = 4.5e1;
+    const double end_time = 1.0;
     const double init_time = 0.0;
 
     // Material data
@@ -359,12 +360,21 @@ int main()
     std::vector<double> fft_c(num_cells);
     auto free_cell_result = MeshUtilities<dim>::FindFirstFreeCellId(box_divisions, fixity);
     if (std::get<0>(free_cell_result)) {
+        double periodic_lumped_mass_data_inv[num_nodes * dim];
+        MatrixViewType periodic_lumped_mass_vector_inv(periodic_lumped_mass_data_inv, num_nodes, dim);
+        MeshUtilities<dim>::CalculateLumpedMassVector(mass_factor, box_divisions, periodic_lumped_mass_vector_inv);
+        for (unsigned int i_node = 0; i_node < num_nodes; ++i_node) {
+            for (unsigned int d = 0; d < dim; ++d) {
+                periodic_lumped_mass_vector_inv(i_node, d) = 1.0 / periodic_lumped_mass_vector_inv(i_node, d);
+            }
+        }
+
         const unsigned int free_cell_id = std::get<1>(free_cell_result);
         std::cout << "Free cell id: " << free_cell_id << "." <<std::endl;
         std::vector<double> x(num_cells, 0.0);
         std::vector<double> y(num_cells);
         x[free_cell_id] = 1.0;
-        Operators<dim>::ApplyPressureOperator(box_divisions, cell_size, active_cells, lumped_mass_vector_inv, x, y);
+        Operators<dim>::ApplyPressureOperator(box_divisions, cell_size, periodic_lumped_mass_vector_inv, x, y);
 
         std::vector<std::complex<double>> fft_x(num_cells); // Complex array for FFT(x) output
         std::vector<std::complex<double>> fft_y(num_cells); // Complex array for FFT(y) output
@@ -541,6 +551,7 @@ int main()
             delta_p_rhs[i] = -delta_p_rhs[i] / dt;
         }
 
+        std::fill(delta_p.begin(), delta_p.end(), 0.0);
         const bool is_converged = cg.Solve(delta_p_rhs, delta_p);
         for (unsigned int i = 0; i < num_cells; ++i) {
             p[i] += delta_p[i];
