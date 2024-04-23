@@ -1,3 +1,4 @@
+#include <fstream>
 #include <iostream>
 
 #include "cell_utilities.hpp"
@@ -344,6 +345,61 @@ void Operators<TDim>::ApplyPressureOperator(
 }
 
 template<int TDim>
+void Operators<TDim>::OutputPressureOperator(
+    const std::array<int, TDim>& rBoxDivisions,
+    const std::array<double, TDim>& rCellSize,
+    const MatrixViewType& rLumpedMassVectorInv,
+    const std::string Filename,
+    const std::string OutputPath)
+{
+    // Allocate auxiliary data
+    const unsigned int n_cells = std::get<1>(MeshUtilities<TDim>::CalculateMeshData(rBoxDivisions));
+    std::vector<double> aux_vect(n_cells);
+    std::vector<std::vector<double>> pressure_operator(n_cells);
+
+    // Obtain the columns of the pressure operator
+    for (unsigned int i = 0; i < n_cells; ++i) {
+        // Initialize output column
+        auto& r_out_col = pressure_operator[i];
+        r_out_col.resize(n_cells, 0.0);
+
+        // Initialize current auxiliary column
+        std::fill(aux_vect.begin(), aux_vect.end(), 0.0);
+        aux_vect[i] = 1.0;
+
+        // Apply the corresponding pressure operator to get current column
+        ApplyPressureOperator(rBoxDivisions, rCellSize, rLumpedMassVectorInv, aux_vect, r_out_col);
+    }
+
+    // Get the non-zero entries of the pressure operator
+    const double tol = 1.0e-14;
+    std::vector<std::tuple<unsigned int, unsigned int, double>> non_zero_entries;
+    for (unsigned int j = 0; j < n_cells; ++j) {
+        const auto& r_j_col = pressure_operator[j];
+        for (unsigned int i = 0; i < n_cells; ++i) {
+            const double val = r_j_col[i];
+            if (std::abs(val) > tol) {
+                non_zero_entries.push_back(std::make_tuple(i, j, val));
+            }
+        }
+    }
+
+    // Output the non-zero entries in (plain) matrix market format
+    std::ofstream out_file(OutputPath + Filename + ".mm");
+    if (out_file.is_open()) {
+        out_file << "%%MatrixMarket matrix coordinate real general" << std::endl;
+        out_file << n_cells << "  " << n_cells << "  " << non_zero_entries.size() << std::endl;
+        for (auto& r_non_zero_entry : non_zero_entries) {
+            const unsigned int row = std::get<0>(r_non_zero_entry);
+            const unsigned int col = std::get<1>(r_non_zero_entry);
+            const double val = std::get<2>(r_non_zero_entry);
+            out_file << row + 1 << "  " << col + 1 << "  " << val << std::endl;
+        }
+        out_file.close();
+    }
+}
+
+template<int TDim>
 void Operators<TDim>::ApplyPressureOperator(
     const std::array<int, TDim>& rBoxDivisions,
     const std::array<double, TDim>& rCellSize,
@@ -362,6 +418,62 @@ void Operators<TDim>::ApplyPressureOperator(
         }
     }
     ApplyDivergenceOperator(rBoxDivisions, rCellSize, rActiveCells, aux, rOutput);
+}
+
+template<int TDim>
+void Operators<TDim>::OutputPressureOperator(
+    const std::array<int, TDim>& rBoxDivisions,
+    const std::array<double, TDim>& rCellSize,
+    const std::vector<bool>& rActiveCells,
+    const MatrixViewType& rLumpedMassVectorInv,
+    const std::string Filename,
+    const std::string OutputPath)
+{
+// Allocate auxiliary data
+    const unsigned int n_cells = std::get<1>(MeshUtilities<TDim>::CalculateMeshData(rBoxDivisions));
+    std::vector<double> aux_vect(n_cells);
+    std::vector<std::vector<double>> pressure_operator(n_cells);
+
+    // Obtain the columns of the pressure operator
+    for (unsigned int i = 0; i < n_cells; ++i) {
+        // Initialize output column
+        auto& r_out_col = pressure_operator[i];
+        r_out_col.resize(n_cells, 0.0);
+
+        // Initialize current auxiliary column
+        std::fill(aux_vect.begin(), aux_vect.end(), 0.0);
+        aux_vect[i] = 1.0;
+
+        // Apply the corresponding pressure operator to get current column
+        ApplyPressureOperator(rBoxDivisions, rCellSize, rActiveCells, rLumpedMassVectorInv, aux_vect, r_out_col);
+    }
+
+    // Get the non-zero entries of the pressure operator
+    const double tol = 1.0e-14;
+    std::vector<std::tuple<unsigned int, unsigned int, double>> non_zero_entries;
+    for (unsigned int j = 0; j < n_cells; ++j) {
+        const auto& r_j_col = pressure_operator[j];
+        for (unsigned int i = 0; i < n_cells; ++i) {
+            const double val = r_j_col[i];
+            if (std::abs(val) > tol) {
+                non_zero_entries.push_back(std::make_tuple(i, j, val));
+            }
+        }
+    }
+
+    // Output the non-zero entries in (plain) matrix market format
+    std::ofstream out_file(OutputPath + Filename + ".mm");
+    if (out_file.is_open()) {
+        out_file << "%%MatrixMarket matrix coordinate real general" << std::endl;
+        out_file << n_cells << "  " << n_cells << "  " << non_zero_entries.size() << std::endl;
+        for (auto& r_non_zero_entry : non_zero_entries) {
+            const unsigned int row = std::get<0>(r_non_zero_entry);
+            const unsigned int col = std::get<1>(r_non_zero_entry);
+            const double val = std::get<2>(r_non_zero_entry);
+            out_file << row + 1 << "  " << col + 1 << "  " << val << std::endl;
+        }
+        out_file.close();
+    }
 }
 
 template class Operators<2>;

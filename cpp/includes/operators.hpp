@@ -46,6 +46,13 @@ public:
         const std::vector<double>& rX,
         std::vector<double>& rOutput);
 
+    static void OutputPressureOperator(
+        const std::array<int, TDim>& rBoxDivisions,
+        const std::array<double, TDim>& rCellSize,
+        const MatrixViewType& rLumpedMassVectorInv,
+        const std::string Filename,
+        const std::string OutputPath = "");
+
     static void ApplyPressureOperator(
         const std::array<int, TDim>& rBoxDivisions,
         const std::array<double, TDim>& rCellSize,
@@ -53,4 +60,12 @@ public:
         const MatrixViewType& rLumpedMassVectorInv,
         const std::vector<double>& rX,
         std::vector<double>& rOutput);
+
+    static void OutputPressureOperator(
+        const std::array<int, TDim>& rBoxDivisions,
+        const std::array<double, TDim>& rCellSize,
+        const std::vector<bool>& rActiveCells,
+        const MatrixViewType& rLumpedMassVectorInv,
+        const std::string Filename,
+        const std::string OutputPath = "");
 };
