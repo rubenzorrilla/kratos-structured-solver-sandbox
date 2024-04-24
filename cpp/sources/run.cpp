@@ -41,8 +41,8 @@ int main()
     const double rho = 1.0e0;
 
     // Input mesh data
-    const std::array<double, dim> box_size({5.0, 1.0});
-    const std::array<int, dim> box_divisions({150, 30});
+    const std::array<double, dim> box_size({1.0, 1.0});
+    const std::array<int, dim> box_divisions({10, 10});
 
     // Compute mesh data
     auto mesh_data = MeshUtilities<dim>::CalculateMeshData(box_divisions);
@@ -200,8 +200,8 @@ int main()
             dist += std::pow(nodal_coords(i_node, d) - cyl_orig[d], 2);
         }
         dist = std::sqrt(dist);
-        distance[i_node] = dist < cyl_rad ? - dist : dist;
-        // distance[i_node] = 1.0;
+        // distance[i_node] = dist < cyl_rad ? - dist : dist;
+        distance[i_node] = 1.0;
         // distance(i_node) = r_coords[1] - 0.5;
     }
 
@@ -368,6 +368,11 @@ int main()
                 periodic_lumped_mass_vector_inv(i_node, d) = 1.0 / periodic_lumped_mass_vector_inv(i_node, d);
             }
         }
+
+        // TODO: TO BE REMOVED!
+        Operators<dim>::OutputPressureOperator(box_divisions, cell_size, periodic_lumped_mass_vector_inv, "pressure_matrix_periodic", results_path);
+        Operators<dim>::OutputPressureOperator(box_divisions, cell_size, active_cells, lumped_mass_vector_inv_bcs, "pressure_matrix", results_path);
+        // TODO: TO BE REMOVED!
 
         const unsigned int free_cell_id = std::get<1>(free_cell_result);
         std::cout << "Free cell id: " << free_cell_id << "." <<std::endl;
@@ -551,17 +556,61 @@ int main()
             delta_p_rhs[i] = -delta_p_rhs[i] / dt;
         }
 
-        std::fill(delta_p.begin(), delta_p.end(), 0.0);
-        const bool is_converged = cg.Solve(delta_p_rhs, delta_p);
+        // TODO: TO BE REMOVED!
+
+        // Output the non-zero entries in (plain) matrix market format
+        const double aux_tol = 1.0e-14;
+        std::vector<std::tuple<unsigned int, double>> non_zero_entries;
         for (unsigned int i = 0; i < num_cells; ++i) {
-            p[i] += delta_p[i];
+            if (std::abs(delta_p_rhs[i]) > aux_tol) {
+                non_zero_entries.push_back(std::make_tuple(i, delta_p_rhs[i]));
+            }
         }
-        tot_p_iters += cg.Iterations();
-        if (is_converged) {
-            std::cout << "Pressure problem converged in " << cg.Iterations() << " iterations." << std::endl;
-        } else {
-            std::cout << "Pressure problem did not converge in " << cg.Iterations() << " iterations." << std::endl;
+
+        std::ofstream out_file(results_path + "b.mm");
+        if (out_file.is_open()) {
+            out_file << "%%MatrixMarket matrix coordinate real general" << std::endl;
+            out_file << num_cells << "  " << 1 << "  " << non_zero_entries.size() << std::endl;
+            for (auto& r_non_zero_entry : non_zero_entries) {
+                const unsigned int row = std::get<0>(r_non_zero_entry);
+                const double val = std::get<1>(r_non_zero_entry);
+                out_file << row + 1 << "  " << 1 << "  " << val << std::endl;
+            }
+            out_file.close();
         }
+
+        return 0;
+
+        // std::fill(delta_p.begin(), delta_p.end(), 0.0);
+        // const bool is_converged = cg.Solve(delta_p_rhs, delta_p);
+        // for (unsigned int i = 0; i < num_cells; ++i) {
+        //     p[i] += delta_p[i];
+        // }
+        // tot_p_iters += cg.Iterations();
+        // if (is_converged) {
+        //     std::cout << "Pressure problem converged in " << cg.Iterations() << " iterations." << std::endl;
+        // } else {
+        //     std::cout << "Pressure problem did not converge in " << cg.Iterations() << " iterations." << std::endl;
+        // }
+
+
+        // const double w = 0.5;
+        // std::vector<double> aux(num_cells, 0.0);
+        // std::fill(delta_p.begin(), delta_p.end(), 0.0);
+        // for (unsigned int it = 0; it < 500000; ++it) {
+        //     double norm_res = 0.0;
+        //     std::fill(aux.begin(), aux.end(), 0.0);
+        //     Operators<dim>::ApplyPressureOperator(box_divisions, cell_size, active_cells, lumped_mass_vector_inv_bcs, delta_p, aux);
+        //     for (unsigned int i = 0; i < num_cells; ++i) {
+        //         const double aux_res = delta_p_rhs[i] - aux[i];
+        //         delta_p[i] += w * aux_res;
+        //         norm_res += std::pow(aux_res, 2);
+        //     }
+        //     norm_res = std::sqrt(norm_res);
+        //     std::cout << "it: " << it << " norm_res: " << norm_res << std::endl;
+        // }
+
+        // TODO: TO BE REMOVED!
 
         // Correct velocity
         Operators<dim>::ApplyGradientOperator(box_divisions, cell_size, active_cells, delta_p, delta_p_grad);
