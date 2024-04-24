@@ -370,7 +370,7 @@ int main()
         }
 
         // TODO: TO BE REMOVED!
-        Operators<dim>::OutputPressureOperator(box_divisions, cell_size, periodic_lumped_mass_vector_inv, "pressure_matrix_periodic", results_path);
+        Operators<dim>::OutputPressureOperator(box_divisions, cell_size, periodic_lumped_mass_vector_inv, "pressure_matrix_without_bcs", results_path);
         Operators<dim>::OutputPressureOperator(box_divisions, cell_size, active_cells, lumped_mass_vector_inv_bcs, "pressure_matrix", results_path);
         // TODO: TO BE REMOVED!
 
