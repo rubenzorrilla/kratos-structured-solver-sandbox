@@ -43,7 +43,7 @@ def GetButcherTableau():
 #     return A, B, C
 
 # Problem data
-end_time = 1.0e1
+end_time = 1.0e0
 init_time = 0.0
 
 # Material data
@@ -456,14 +456,20 @@ if found:
     x[free_cell_id] = 1.0
     y = ApplyPressureOperator(x, lumped_mass_vector_inv)
 
-    fft_x = np.fft.fft(x)
-    fft_y = np.fft.fft(y)
-    fft_c = np.real(fft_y / fft_x)# Take the real part only (imaginary one is zero)
-    fft_c[0] = 1.0 # Remove the first coefficient as this is associated to the solution average
+    x_2d = x.reshape(box_divisions[0], box_divisions[1])
+    y_2d = y.reshape(box_divisions[0], box_divisions[1])
+
+    fft_x = np.fft.fft2(x_2d)
+    fft_y = np.fft.fft2(y_2d)
+    fft_c = np.real(fft_y / fft_x) # Take the real part only (imaginary one is zero)
+
+    fft_c = np.where(abs(fft_c) < 1.0e-14, 1.0, fft_c) # Remove the coefficient associated to the solution average
 
     def apply_precond(r):
-        fft_r = np.fft.fft(r)
-        return np.real(np.fft.ifft(fft_r/fft_c))
+        r_2d = r.reshape(box_divisions[0], box_divisions[1])
+        fft_r = np.fft.fft2(r_2d)
+        aux_2d = np.fft.ifft2(fft_r/fft_c)
+        return np.real(aux_2d.flatten())
 
     precond = scipy.sparse.linalg.LinearOperator((num_cells, num_cells), matvec=apply_precond)
 else:
@@ -562,7 +568,7 @@ while current_time < end_time:
     def nonlocal_iterate(arr):
         global p_iters
         p_iters += 1
-    delta_p, converged = scipy.sparse.linalg.cg(pressure_op, delta_p_rhs, tol=1.0e-3, callback=nonlocal_iterate, M=precond)
+    delta_p, converged = scipy.sparse.linalg.cg(pressure_op, delta_p_rhs, tol=1.0e-7, callback=nonlocal_iterate, M=precond)
     p += delta_p
     tot_p_iters += p_iters
     print(f"Pressure iterations: {p_iters}.")
