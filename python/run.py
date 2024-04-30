@@ -54,7 +54,7 @@ rho = 1.0e0
 
 # Mesh data
 box_size = [1.0,1.0,None]
-box_divisions = [4,4,None]
+box_divisions = [10,10,None]
 # box_divisions = [150,30,None]
 cell_size = [i/j if i is not None else 0.0 for i, j in zip(box_size, box_divisions)]
 if box_size[2] == None:
@@ -94,9 +94,9 @@ def GetNodeGlobalId(i, j, k):
 def GetCellNodesGlobalIds(i, j, k):
     cell_ids = np.empty(4, dtype=int) if k == None else np.empty(8, dtype=int)
     cell_ids[0] = GetNodeGlobalId(i, j, k)
-    cell_ids[1] = GetNodeGlobalId(i + 1, j, k)
+    cell_ids[1] = GetNodeGlobalId(i, j + 1, k)
     cell_ids[2] = GetNodeGlobalId(i + 1, j + 1, k)
-    cell_ids[3] = GetNodeGlobalId(i, j + 1, k)
+    cell_ids[3] = GetNodeGlobalId(i + 1, j, k)
     if k is not None:
         cell_ids[4] = GetNodeGlobalId(i, j, k + 1)
         cell_ids[5] = GetNodeGlobalId(i + 1, j, k + 1)
@@ -217,11 +217,11 @@ for i_node in range(num_nodes):
         y_coord = nodes[i_node][1]
         # v[i_node, 0] = 1.0
         # v_n[i_node, 0] = 1.0
-        # v[i_node, 0] = 6.0*y_coord*(1.0-y_coord)
-        # v_n[i_node, 0] = 6.0*y_coord*(1.0-y_coord)
-        if y_coord > 0.5:
-            v[i_node, 0] = y_coord - 0.5
-            v_n[i_node, 0] = y_coord - 0.5
+        v[i_node, 0] = 6.0*y_coord*(1.0-y_coord)
+        v_n[i_node, 0] = 6.0*y_coord*(1.0-y_coord)
+        # if y_coord > 0.5:
+        #     v[i_node, 0] = y_coord - 0.5
+        #     v_n[i_node, 0] = y_coord - 0.5
 
     # Top wall
     if node[1] > (1.0-tol):
@@ -237,9 +237,9 @@ cyl_orig = [1.25,0.5]
 distance = np.empty(num_nodes)
 for i_node in range(num_nodes):
     node = nodes[i_node]
-    distance[i_node] = node[1] - 0.5
+    # distance[i_node] = node[1] - 0.5
     # dist = np.linalg.norm(node - cyl_orig)
-    # distance[i_node] = 1.0
+    distance[i_node] = 1.0
     # distance[i_node] = - dist if dist < cyl_rad else dist
 
 # Find the surrogate boundary
@@ -431,14 +431,14 @@ def FindFirstFreeCellId():
             for j in range(box_divisions[1]):
                 cell_node_ids = GetCellNodesGlobalIds(i, j, None)
                 if not fixity[cell_node_ids, :].any():
-                    return GetCellGlobalId(i, j, None)
+                    return True, GetCellGlobalId(i, j, None)
     else:
         for i in range(box_divisions[0]):
             for j in range(box_divisions[1]):
                 for k in range(box_divisions[2]):
                     cell_node_ids = GetCellNodesGlobalIds(i, j, k)
                     if not fixity[cell_node_ids, :].any():
-                        return GetCellGlobalId(i, j, k)
+                        return True, GetCellGlobalId(i, j, k)
     return False, 0
 
 # Create the preconditioner for the pressure CG solver
@@ -536,8 +536,6 @@ while current_time < end_time:
 
                         # Calculate current cell residual
                         cell_res = element.CalculateRightHandSide(cell_size[0], cell_size[1], cell_size[2], mu, rho, cell_v, cell_p, cell_f, cell_acc)
-
-                        print(cell_res)
 
                         # Assemble current cell residual
                         aux_i = 0

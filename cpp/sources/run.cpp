@@ -557,43 +557,41 @@ int main()
         }
 
         // TODO: TO BE REMOVED!
-
-        // Output the non-zero entries in (plain) matrix market format
-        const double aux_tol = 1.0e-14;
-        std::vector<std::tuple<unsigned int, double>> non_zero_entries;
-        for (unsigned int i = 0; i < num_cells; ++i) {
-            if (std::abs(delta_p_rhs[i]) > aux_tol) {
-                non_zero_entries.push_back(std::make_tuple(i, delta_p_rhs[i]));
-            }
-        }
-
-        std::ofstream out_file(results_path + "b.mm");
-        if (out_file.is_open()) {
-            out_file << "%%MatrixMarket matrix coordinate real general" << std::endl;
-            out_file << num_cells << "  " << 1 << "  " << non_zero_entries.size() << std::endl;
-            for (auto& r_non_zero_entry : non_zero_entries) {
-                const unsigned int row = std::get<0>(r_non_zero_entry);
-                const double val = std::get<1>(r_non_zero_entry);
-                out_file << row + 1 << "  " << 1 << "  " << val << std::endl;
-            }
-            out_file.close();
-        }
-
-        return 0;
-
-        // std::fill(delta_p.begin(), delta_p.end(), 0.0);
-        // const bool is_converged = cg.Solve(delta_p_rhs, delta_p);
+        // // Output the non-zero entries in (plain) matrix market format
+        // const double aux_tol = 1.0e-14;
+        // std::vector<std::tuple<unsigned int, double>> non_zero_entries;
         // for (unsigned int i = 0; i < num_cells; ++i) {
-        //     p[i] += delta_p[i];
-        // }
-        // tot_p_iters += cg.Iterations();
-        // if (is_converged) {
-        //     std::cout << "Pressure problem converged in " << cg.Iterations() << " iterations." << std::endl;
-        // } else {
-        //     std::cout << "Pressure problem did not converge in " << cg.Iterations() << " iterations." << std::endl;
+        //     if (std::abs(delta_p_rhs[i]) > aux_tol) {
+        //         non_zero_entries.push_back(std::make_tuple(i, delta_p_rhs[i]));
+        //     }
         // }
 
+        // std::ofstream out_file(results_path + "b.mm");
+        // if (out_file.is_open()) {
+        //     out_file << "%%MatrixMarket matrix coordinate real general" << std::endl;
+        //     out_file << num_cells << "  " << 1 << "  " << non_zero_entries.size() << std::endl;
+        //     for (auto& r_non_zero_entry : non_zero_entries) {
+        //         const unsigned int row = std::get<0>(r_non_zero_entry);
+        //         const double val = std::get<1>(r_non_zero_entry);
+        //         out_file << row + 1 << "  " << 1 << "  " << val << std::endl;
+        //     }
+        //     out_file.close();
+        // }
+        // TODO: TO BE REMOVED!
 
+        std::fill(delta_p.begin(), delta_p.end(), 0.0);
+        const bool is_converged = cg.Solve(delta_p_rhs, delta_p);
+        for (unsigned int i = 0; i < num_cells; ++i) {
+            p[i] += delta_p[i];
+        }
+        tot_p_iters += cg.Iterations();
+        if (is_converged) {
+            std::cout << "Pressure problem converged in " << cg.Iterations() << " iterations." << std::endl;
+        } else {
+            std::cout << "Pressure problem did not converge in " << cg.Iterations() << " iterations." << std::endl;
+        }
+
+        // // TODO: TO BE REMOVED!
         // const double w = 0.5;
         // std::vector<double> aux(num_cells, 0.0);
         // std::fill(delta_p.begin(), delta_p.end(), 0.0);
@@ -609,8 +607,7 @@ int main()
         //     norm_res = std::sqrt(norm_res);
         //     std::cout << "it: " << it << " norm_res: " << norm_res << std::endl;
         // }
-
-        // TODO: TO BE REMOVED!
+        // // TODO: TO BE REMOVED!
 
         // Correct velocity
         Operators<dim>::ApplyGradientOperator(box_divisions, cell_size, active_cells, delta_p, delta_p_grad);
