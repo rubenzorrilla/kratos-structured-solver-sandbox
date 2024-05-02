@@ -7,6 +7,7 @@ export CXX=/usr/bin/clang++-17
 # Set variables
 export SOURCE_DIR="/home/rzorrilla/kratos-structured-solver-sandbox/cpp"
 export BUILD_DIR="${SOURCE_DIR}/build"
+#export FFTW
 
 # Set basic configuration
 export BUILD_TYPE="Release"

@@ -3,6 +3,7 @@
 #include <vector>
 #include <utility>
 #include <unsupported/Eigen/FFT>
+#include <fftw3.h>
 
 #include "mesh_utilities.hpp"
 #include "pressure_operator.hpp"
@@ -187,22 +188,62 @@ private:
         const VectorType& rInput,
         VectorType& rOutput)
     {
-        std::vector<std::complex<double>> fft_b(mProblemSize);     // Complex array for FFT(x) output
-        std::vector<std::complex<double>> b_complex(mProblemSize); // Complex array for FFT(x) input
+        // std::vector<std::complex<double>> fft_b(mProblemSize);     // Complex array for FFT(x) output
+        // std::vector<std::complex<double>> b_complex(mProblemSize); // Complex array for FFT(x) input
+        // for (unsigned int i = 0; i < mProblemSize; ++i) {
+        //     b_complex[i].real(rInput[i]);
+        // }
+
+        // Eigen::FFT<double> fft;
+        // std::vector<std::complex<double>> sol(mProblemSize);
+        // fft.fwd(fft_b, b_complex);
+        // for (unsigned int i = 0; i < mProblemSize; ++i) {
+        //     fft_b[i] = fft_b[i] / mrFFTc[i];
+        // }
+        // fft.inv(sol, fft_b);
+        // for (unsigned int i = 0; i < mProblemSize; ++i) {
+        //     rOutput[i] = sol[i].real();
+        // }
+
+        fftw_complex *fft_b;
+        fftw_complex *b_complex;
+        fft_b = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * mProblemSize);
+        b_complex = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * mProblemSize);
+
+        fftw_plan p_b;
+        p_b = fftw_plan_dft(TDim, mrPressureOperator.GetBoxDivisions().data(), b_complex, fft_b, FFTW_FORWARD, FFTW_ESTIMATE);
+
         for (unsigned int i = 0; i < mProblemSize; ++i) {
-            b_complex[i].real(rInput[i]);
+            b_complex[i][0] = rInput[i]; // Setting real part
+            b_complex[i][1] = 0.0; // Setting imaginary part
         }
 
-        Eigen::FFT<double> fft;
-        std::vector<std::complex<double>> sol(mProblemSize);
-        fft.fwd(fft_b, b_complex);
+        fftw_execute(p_b);
+
+        fftw_complex *ifft_aux;
+        fftw_complex *aux_complex;
+        ifft_aux = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * mProblemSize);
+        aux_complex = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * mProblemSize);
+
+        fftw_plan p_aux;
+        p_aux = fftw_plan_dft(TDim, mrPressureOperator.GetBoxDivisions().data(), aux_complex, ifft_aux, FFTW_BACKWARD, FFTW_ESTIMATE);
+
         for (unsigned int i = 0; i < mProblemSize; ++i) {
-            fft_b[i] = fft_b[i] / mrFFTc[i];
+            const double num_real = fft_b[i][0] * mrFFTc[i]; // Note that in here we are assuming that the imaginary part of mrFFTc is zero
+            const double num_imag = fft_b[i][1] * mrFFTc[i]; // Note that in here we are assuming that the imaginary part of mrFFTc is zero
+            const double den = std::pow(fft_b[i][0], 2); // Note that in here we are assuming that the imaginary part of mrFFTc is zero
+            aux_complex[i][0] = num_real / den;
+            aux_complex[i][1] = num_imag / den;
         }
-        fft.inv(sol, fft_b);
+
+        fftw_execute(p_aux);
+
         for (unsigned int i = 0; i < mProblemSize; ++i) {
-            rOutput[i] = sol[i].real();
+            rOutput[i] = ifft_aux[i][0];
         }
+
+        fftw_destroy_plan(p_b);
+        fftw_destroy_plan(p_aux);
     }
 
 };

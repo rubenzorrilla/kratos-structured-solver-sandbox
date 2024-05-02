@@ -11,6 +11,8 @@
 #include <unsupported/Eigen/FFT>
 #include "include/experimental/mdspan"
 
+#include <fftw3.h>
+
 #include "cell_utilities.hpp"
 #include "incompressible_navier_stokes_q1_p0_structured_element.hpp"
 #include "mdspan_utilities.hpp"
@@ -381,22 +383,58 @@ int main()
         x[free_cell_id] = 1.0;
         Operators<dim>::ApplyPressureOperator(box_divisions, cell_size, periodic_lumped_mass_vector_inv, x, y);
 
-        std::vector<std::complex<double>> fft_x(num_cells); // Complex array for FFT(x) output
-        std::vector<std::complex<double>> fft_y(num_cells); // Complex array for FFT(y) output
-        std::vector<std::complex<double>> x_complex(num_cells); // Complex array for FFT(x) input
-        std::vector<std::complex<double>> y_complex(num_cells); // Complex array for FFT(y) input
+        // std::vector<std::complex<double>> fft_x(num_cells); // Complex array for FFT(x) output
+        // std::vector<std::complex<double>> fft_y(num_cells); // Complex array for FFT(y) output
+        // std::vector<std::complex<double>> x_complex(num_cells); // Complex array for FFT(x) input
+        // std::vector<std::complex<double>> y_complex(num_cells); // Complex array for FFT(y) input
+        // for (unsigned int i = 0; i < num_cells; ++i) {
+        //     x_complex[i].real(x[i]); // Set x_complex real data from x
+        //     y_complex[i].real(y[i]); // Set y_complex real data from y
+        // }
+
+        // Eigen::FFT<double> fft;
+        // fft.fwd(fft_x, x_complex);
+        // fft.fwd(fft_y, y_complex);
+        // for (unsigned int i = 0; i < num_cells; ++i) {
+        //     fft_c[i] = (fft_y[i] / fft_x[i]).real(); // Take the real part only (imaginary one is zero)
+        // }
+        // fft_c[0] = 1.0; // Remove the first coefficient as this is associated to the solution average
+
+        fftw_complex *fft_x_new;
+        fftw_complex *fft_y_new;
+        fftw_complex *x_complex_new;
+        fftw_complex *y_complex_new;
+        fft_x_new = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * num_cells);
+        fft_y_new = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * num_cells);
+        x_complex_new = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * num_cells);
+        y_complex_new = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * num_cells);
+
+        fftw_plan p_x;
+        fftw_plan p_y;
+        p_x = fftw_plan_dft(dim, box_divisions.data(), x_complex_new, fft_x_new, FFTW_FORWARD, FFTW_ESTIMATE);
+        p_y = fftw_plan_dft(dim, box_divisions.data(), y_complex_new, fft_y_new, FFTW_FORWARD, FFTW_ESTIMATE);
+
         for (unsigned int i = 0; i < num_cells; ++i) {
-            x_complex[i].real(x[i]); // Set x_complex real data from x
-            y_complex[i].real(y[i]); // Set y_complex real data from y
+            x_complex_new[i][0] = x[i]; // Setting real part
+            x_complex_new[i][1] = 0.0; // Setting imaginary part
+            y_complex_new[i][0] = y[i]; // Setting real part
+            y_complex_new[i][1] = 0.0; // Setting imaginary part
         }
 
-        Eigen::FFT<double> fft;
-        fft.fwd(fft_x, x_complex);
-        fft.fwd(fft_y, y_complex);
+        fftw_execute(p_x);
+        fftw_execute(p_y);
+
+        const double tol = 1.0e-15;
         for (unsigned int i = 0; i < num_cells; ++i) {
-            fft_c[i] = (fft_y[i] / fft_x[i]).real(); // Take the real part only (imaginary one is zero)
+            const double num = fft_y_new[i][0] * fft_x_new[i][0] + fft_y_new[i][1] * fft_x_new[i][1];
+            const double den = std::pow(fft_x_new[i][0], 2) + std::pow(fft_x_new[i][1], 2);
+            const double real_part = num / den; // Take the real part only (imaginary one is zero)
+            fft_c[i] = std::abs(real_part) > tol ? real_part : 0.0; // Remove the coefficient associated to the solution average
         }
-        fft_c[0] = 1.0; // Remove the first coefficient as this is associated to the solution average
+
+        fftw_destroy_plan(p_x);
+        fftw_destroy_plan(p_y);
+
         std::cout << "Pressure preconditioner set." << std::endl;
     } else {
         std::cout << "There is no cell with all the DOFs free. No pressure preconditioner can be set." << std::endl;

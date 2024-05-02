@@ -55,6 +55,11 @@ public:
         return std::get<1>(MeshUtilities<TDim>::CalculateMeshData(mrBoxDivisions));
     }
 
+    const std::array<int, TDim>& GetBoxDivisions() const
+    {
+        return mrBoxDivisions;
+    }
+
     const std::vector<bool>& GetActiveCells() const
     {
         return mrActiveCells;
