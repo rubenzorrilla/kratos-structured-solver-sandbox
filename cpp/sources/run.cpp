@@ -39,10 +39,12 @@ int main()
     // Material data
     const double mu = 2.0e-3;
     const double rho = 1.0e0;
+    const double sound_velocity = 1500;
+    const bool artificial_compressibility = false;
 
     // Input mesh data
     const std::array<double, dim> box_size({1.0, 1.0});
-    const std::array<int, dim> box_divisions({10, 10});
+    const std::array<int, dim> box_divisions({100, 100});
 
     // Compute mesh data
     auto mesh_data = MeshUtilities<dim>::CalculateMeshData(box_divisions);
@@ -469,9 +471,16 @@ int main()
     const double abs_tol = 1.0e-5;
     const double rel_tol = 1.0e-3;
     const double max_iter = 5000;
-    PressureOperator<dim> pressure_operator(box_divisions, cell_size, active_cells, lumped_mass_vector_inv_bcs);
+    std::unique_ptr<PressureOperator<dim>> p_pressure_operator;
+    if (artificial_compressibility) {
+        auto p_aux = std::make_unique<PressureOperator<dim>>(rho, sound_velocity, box_divisions, cell_size, active_cells, lumped_mass_vector_inv_bcs);
+        std::swap(p_pressure_operator, p_aux);
+    } else {
+        auto p_aux = std::make_unique<PressureOperator<dim>>(box_divisions, cell_size, active_cells, lumped_mass_vector_inv_bcs);
+        std::swap(p_pressure_operator, p_aux);
+    }
     std::cout << "Pressure linear operator created." << std::endl;
-    PressureConjugateGradientSolver<dim> cg(abs_tol, rel_tol, max_iter, pressure_operator, fft_c);
+    PressureConjugateGradientSolver<dim> cg(abs_tol, rel_tol, max_iter, *p_pressure_operator, fft_c);
     std::cout << "Pressure conjugate gradient solver created." << std::endl;
 
     // Time loop
@@ -483,6 +492,9 @@ int main()
         // Note that we use the current step velocity to be updated as it equals the previous one at this point
         const double dt = TimeUtilities<dim>::CalculateDeltaTime(rho, mu, cell_size, v, 0.2, 0.2);
         std::cout << "\n### Step " << current_step << " - time " << current_time << " - dt " << dt << " ###" << std::endl;
+
+        // Set current time increment into the pressure operator object
+        p_pressure_operator->SetDeltaTime(dt);
 
         // Update the surrogate boundary Dirichlet value from the previous time step velocity gradient
         SbmUtilities<dim>::UpdateSurrogateBoundaryDirichletValues(mass_factor, box_divisions, cell_size, surrogate_cells, surrogate_nodes, lumped_mass_vector, distance_vects, v, v_surrogate);
@@ -590,8 +602,9 @@ int main()
 
         // Solve pressure update
         Operators<dim>::ApplyDivergenceOperator(box_divisions, cell_size, active_cells, v, delta_p_rhs);
+        //TODO: Do something to skip this loop (maybe a pass a factor to ApplyDivergenceOperator)
         for (unsigned int i = 0; i < num_cells; ++i) {
-            delta_p_rhs[i] = -delta_p_rhs[i] / dt;
+            delta_p_rhs[i] = -delta_p_rhs[i];
         }
 
         // TODO: TO BE REMOVED!
