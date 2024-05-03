@@ -126,6 +126,10 @@ for filename in os.listdir(os.getcwd()):
         step_vect.append(step)
 step_vect.sort()
 
+# Initialize database
+KratosMultiphysics.VariableUtils().SetNonHistoricalVariableToZero(KratosMultiphysics.DISTANCE, output_model_part.Nodes)
+KratosMultiphysics.VariableUtils().SetNonHistoricalVariableToZero(KratosMultiphysics.VELOCITY, output_model_part.Nodes)
+
 # Time loop
 for step in step_vect:
 

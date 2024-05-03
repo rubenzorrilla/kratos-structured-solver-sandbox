@@ -190,6 +190,15 @@ vtu_output = VtuOutputProcess(
 vtu_output.ExecuteInitialize()
 vtu_output.ExecuteBeforeSolutionLoop()
 
+KratosMultiphysics.VariableUtils().SetNonHistoricalVariableToZero(KratosMultiphysics.VELOCITY, output_model_part.Nodes)
+KratosMultiphysics.VariableUtils().SetNonHistoricalVariableToZero(KratosMultiphysics.ACCELERATION, output_model_part.Nodes)
+KratosMultiphysics.VariableUtils().SetNonHistoricalVariableToZero(KratosMultiphysics.VOLUME_ACCELERATION, output_model_part.Nodes)
+KratosMultiphysics.VariableUtils().SetNonHistoricalVariableToZero(KratosMultiphysics.NODAL_AREA, output_model_part.Nodes)
+KratosMultiphysics.VariableUtils().SetNonHistoricalVariableToZero(KratosMultiphysics.DISTANCE, output_model_part.Nodes)
+KratosMultiphysics.VariableUtils().SetNonHistoricalVariableToZero(KratosMultiphysics.YOUNG_MODULUS, output_model_part.Nodes)
+KratosMultiphysics.VariableUtils().SetNonHistoricalVariableToZero(KratosMultiphysics.DISPLACEMENT, output_model_part.Nodes)
+
+
 # Create mesh dataset
 p = np.zeros((num_cells))
 f = np.zeros((num_nodes, dim))
