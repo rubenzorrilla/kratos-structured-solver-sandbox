@@ -1,4 +1,4 @@
-#include <Eigen/Dense>
+// #include <Eigen/Dense>
 #include "include/experimental/mdspan"
 
 #pragma once
@@ -34,21 +34,21 @@ public:
         const HexaVectorDataView& acc,
         std::array<double, 24>& RHS);
 
-    static void GetCellGradientOperator(
-        const double a,
-        const double b,
-        Eigen::Array<double, 4, 2>& G);
+    // static void GetCellGradientOperator(
+    //     const double a,
+    //     const double b,
+    //     Eigen::Array<double, 4, 2>& G);
 
     static void GetCellGradientOperator(
         const double a,
         const double b,
         QuadVectorDataView& G);
 
-    static void GetCellGradientOperator(
-        const double a,
-        const double b,
-        const double c,
-        Eigen::Array<double, 8, 3>& G);
+    // static void GetCellGradientOperator(
+    //     const double a,
+    //     const double b,
+    //     const double c,
+    //     Eigen::Array<double, 8, 3>& G);
 
     static void GetCellGradientOperator(
         const double a,

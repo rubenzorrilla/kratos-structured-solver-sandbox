@@ -1,3 +1,5 @@
+#include <cmath>
+
 #include "incompressible_navier_stokes_q1_p0_structured_element.hpp"
 
 void IncompressibleNavierStokesQ1P0StructuredElement::CalculateRightHandSide(
@@ -12,13 +14,13 @@ void IncompressibleNavierStokesQ1P0StructuredElement::CalculateRightHandSide(
     std::array<double, 8>& RHS)
 {
 
-    const double cRHS0 = pow(a, -2);
+    const double cRHS0 = std::pow(a, -2);
     const double cRHS1 = 0.62200846792814624*v(0,0);
     const double cRHS2 = 0.16666666666666669*v(3,0);
     const double cRHS3 = -0.16666666666666669*v(2,0);
     const double cRHS4 = cRHS2 + cRHS3;
     const double cRHS5 = cRHS1 + cRHS4 - 0.62200846792814624*v(1,0);
-    const double cRHS6 = pow(b, -2);
+    const double cRHS6 = std::pow(b, -2);
     const double cRHS7 = 0.044658198738520456*v(0,0);
     const double cRHS8 = 0.044658198738520456*v(3,0);
     const double cRHS9 = 0.16666666666666669*v(1,0);
@@ -94,7 +96,7 @@ void IncompressibleNavierStokesQ1P0StructuredElement::CalculateRightHandSide(
     const double cRHS79 = 0.26794919243112275*v(0,0) + 0.26794919243112275*v(2,0);
     const double cRHS80 = 0.26794919243112275*v(0,1) + 0.26794919243112275*v(2,1);
     const double cRHS81 = 2.4880338717125849*rho/(sqrt(a)*sqrt(b));
-    const double cRHS82 = 1.0/(cRHS78 + cRHS81*sqrt(pow(cRHS79 + v(1,0) + 0.071796769724490839*v(3,0), 2) + pow(cRHS80 + v(1,1) + 0.071796769724490839*v(3,1), 2)));
+    const double cRHS82 = 1.0/(cRHS78 + cRHS81*sqrt(std::pow(cRHS79 + v(1,0) + 0.071796769724490839*v(3,0), 2) + std::pow(cRHS80 + v(1,1) + 0.071796769724490839*v(3,1), 2)));
     const double cRHS83 = 0.16666666666666669*acc(0,0) + 0.16666666666666669*acc(2,0);
     const double cRHS84 = rho*(0.62200846792814624*acc(1,0) + 0.044658198738520456*acc(3,0) + cRHS83);
     const double cRHS85 = 0.16666666666666669*f(0,0) + 0.16666666666666669*f(2,0);
@@ -116,7 +118,7 @@ void IncompressibleNavierStokesQ1P0StructuredElement::CalculateRightHandSide(
     const double cRHS101 = -cRHS100;
     const double cRHS102 = 0.16666666666666669*rho;
     const double cRHS103 = cRHS101*cRHS102;
-    const double cRHS104 = 1.0/(cRHS78 + cRHS81*sqrt(pow(cRHS79 + 0.071796769724490839*v(1,0) + v(3,0), 2) + pow(cRHS80 + 0.071796769724490839*v(1,1) + v(3,1), 2)));
+    const double cRHS104 = 1.0/(cRHS78 + cRHS81*sqrt(std::pow(cRHS79 + 0.071796769724490839*v(1,0) + v(3,0), 2) + std::pow(cRHS80 + 0.071796769724490839*v(1,1) + v(3,1), 2)));
     const double cRHS105 = rho*(0.044658198738520456*acc(1,0) + 0.62200846792814624*acc(3,0) + cRHS83);
     const double cRHS106 = rho*(cRHS85 + 0.044658198738520456*f(1,0) + 0.62200846792814624*f(3,0));
     const double cRHS107 = cRHS105 - cRHS106 + cRHS54*rho + cRHS92;
@@ -131,7 +133,7 @@ void IncompressibleNavierStokesQ1P0StructuredElement::CalculateRightHandSide(
     const double cRHS116 = cRHS102*cRHS115;
     const double cRHS117 = 0.26794919243112275*v(1,0) + 0.26794919243112275*v(3,0);
     const double cRHS118 = 0.26794919243112275*v(1,1) + 0.26794919243112275*v(3,1);
-    const double cRHS119 = 1.0/(cRHS78 + cRHS81*sqrt(pow(cRHS117 + v(0,0) + 0.071796769724490839*v(2,0), 2) + pow(cRHS118 + v(0,1) + 0.071796769724490839*v(2,1), 2)));
+    const double cRHS119 = 1.0/(cRHS78 + cRHS81*sqrt(std::pow(cRHS117 + v(0,0) + 0.071796769724490839*v(2,0), 2) + std::pow(cRHS118 + v(0,1) + 0.071796769724490839*v(2,1), 2)));
     const double cRHS120 = 0.16666666666666669*acc(1,0) + 0.16666666666666669*acc(3,0);
     const double cRHS121 = rho*(0.62200846792814624*acc(0,0) + 0.044658198738520456*acc(2,0) + cRHS120);
     const double cRHS122 = cRHS121 - cRHS38 + cRHS70*rho + cRHS92;
@@ -141,7 +143,7 @@ void IncompressibleNavierStokesQ1P0StructuredElement::CalculateRightHandSide(
     const double cRHS126 = -cRHS125;
     const double cRHS127 = 0.62200846792814624*rho;
     const double cRHS128 = cRHS126*cRHS127;
-    const double cRHS129 = 1.0/(cRHS78 + cRHS81*sqrt(pow(cRHS117 + 0.071796769724490839*v(0,0) + v(2,0), 2) + pow(cRHS118 + 0.071796769724490839*v(0,1) + v(2,1), 2)));
+    const double cRHS129 = 1.0/(cRHS78 + cRHS81*sqrt(std::pow(cRHS117 + 0.071796769724490839*v(0,0) + v(2,0), 2) + std::pow(cRHS118 + 0.071796769724490839*v(0,1) + v(2,1), 2)));
     const double cRHS130 = rho*(0.044658198738520456*acc(0,0) + 0.62200846792814624*acc(2,0) + cRHS120);
     const double cRHS131 = cRHS130 - cRHS39 + cRHS76*rho + cRHS92;
     const double cRHS132 = -cRHS131;
@@ -294,26 +296,26 @@ void IncompressibleNavierStokesQ1P0StructuredElement::CalculateRightHandSide(
 
 }
 
-void IncompressibleNavierStokesQ1P0StructuredElement::GetCellGradientOperator(
-    const double a,
-    const double b,
-    Eigen::Array<double, 4, 2>& G)
-{
+// void IncompressibleNavierStokesQ1P0StructuredElement::GetCellGradientOperator(
+//     const double a,
+//     const double b,
+//     Eigen::Array<double, 4, 2>& G)
+// {
 
-    const double cG0 = 0.5*b;
-    const double cG1 = -cG0;
-    const double cG2 = 0.5*a;
-    const double cG3 = -cG2;
-    G(0,0) = cG1;
-    G(0,1) = cG3;
-    G(1,0) = cG0;
-    G(1,1) = cG3;
-    G(2,0) = cG0;
-    G(2,1) = cG2;
-    G(3,0) = cG1;
-    G(3,1) = cG2;
+//     const double cG0 = 0.5*b;
+//     const double cG1 = -cG0;
+//     const double cG2 = 0.5*a;
+//     const double cG3 = -cG2;
+//     G(0,0) = cG1;
+//     G(0,1) = cG3;
+//     G(1,0) = cG0;
+//     G(1,1) = cG3;
+//     G(2,0) = cG0;
+//     G(2,1) = cG2;
+//     G(3,0) = cG1;
+//     G(3,1) = cG2;
 
-}
+// }
 
 void IncompressibleNavierStokesQ1P0StructuredElement::GetCellGradientOperator(
     const double a,
@@ -352,15 +354,15 @@ void IncompressibleNavierStokesQ1P0StructuredElement::CalculateRightHandSide(
 //substitute_rhs_3d
 }
 
-void IncompressibleNavierStokesQ1P0StructuredElement::GetCellGradientOperator(
-    const double a,
-    const double b,
-    const double c,
-    Eigen::Array<double, 8, 3>& G)
-{
+// void IncompressibleNavierStokesQ1P0StructuredElement::GetCellGradientOperator(
+//     const double a,
+//     const double b,
+//     const double c,
+//     Eigen::Array<double, 8, 3>& G)
+// {
 
-//substitute_G_3d
-}
+// //substitute_G_3d
+// }
 
 void IncompressibleNavierStokesQ1P0StructuredElement::GetCellGradientOperator(
     const double a,

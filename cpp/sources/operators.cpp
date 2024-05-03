@@ -26,7 +26,9 @@ void Operators<2>::ApplyGradientOperator(
     }
 
     // Get the cell gradient operator
-    Eigen::Array<double,4,2> cell_gradient_operator;
+    // Eigen::Array<double,4,2> cell_gradient_operator;
+    double cell_gradient_operator_data[8];
+    IncompressibleNavierStokesQ1P0StructuredElement::QuadVectorDataView cell_gradient_operator(cell_gradient_operator_data, 4, 2);
     IncompressibleNavierStokesQ1P0StructuredElement::GetCellGradientOperator(rCellSize[0], rCellSize[1], cell_gradient_operator);
 
     // Apply the gradient operator onto a vector
@@ -66,7 +68,9 @@ void Operators<3>::ApplyGradientOperator(
     }
 
     // Get the cell gradient operator
-    Eigen::Array<double,8,3> cell_gradient_operator;
+    // Eigen::Array<double,8,3> cell_gradient_operator;
+    double cell_gradient_operator_data[24];
+    IncompressibleNavierStokesQ1P0StructuredElement::HexaVectorDataView cell_gradient_operator(cell_gradient_operator_data, 8, 3);
     IncompressibleNavierStokesQ1P0StructuredElement::GetCellGradientOperator(rCellSize[0], rCellSize[1], rCellSize[2], cell_gradient_operator);
 
     // Apply the gradient operator onto a vector
@@ -109,7 +113,9 @@ void Operators<2>::ApplyGradientOperator(
     }
 
     // Get the cell gradient operator
-    Eigen::Array<double,4,2> cell_gradient_operator;
+    // Eigen::Array<double,4,2> cell_gradient_operator;
+    double cell_gradient_operator_data[8];
+    IncompressibleNavierStokesQ1P0StructuredElement::QuadVectorDataView cell_gradient_operator(cell_gradient_operator_data, 4, 2);
     IncompressibleNavierStokesQ1P0StructuredElement::GetCellGradientOperator(rCellSize[0], rCellSize[1], cell_gradient_operator);
 
     // Apply the gradient operator onto a vector
@@ -153,7 +159,9 @@ void Operators<3>::ApplyGradientOperator(
     }
 
     // Get the cell gradient operator
-    Eigen::Array<double,8,3> cell_gradient_operator;
+    // Eigen::Array<double,8,3> cell_gradient_operator;
+    double cell_gradient_operator_data[24];
+    IncompressibleNavierStokesQ1P0StructuredElement::HexaVectorDataView cell_gradient_operator(cell_gradient_operator_data, 8, 3);
     IncompressibleNavierStokesQ1P0StructuredElement::GetCellGradientOperator(rCellSize[0], rCellSize[1], rCellSize[2], cell_gradient_operator);
 
     // Apply the gradient operator onto a vector
@@ -192,7 +200,9 @@ void Operators<2>::ApplyDivergenceOperator(
     }
 
     // Get the cell gradient operator
-    Eigen::Array<double,4,2> cell_gradient_operator;
+    // Eigen::Array<double,4,2> cell_gradient_operator;
+    double cell_gradient_operator_data[8];
+    IncompressibleNavierStokesQ1P0StructuredElement::QuadVectorDataView cell_gradient_operator(cell_gradient_operator_data, 4, 2);
     IncompressibleNavierStokesQ1P0StructuredElement::GetCellGradientOperator(rCellSize[0], rCellSize[1], cell_gradient_operator);
 
     // Apply the gradient operator onto a vector
@@ -226,7 +236,9 @@ void Operators<3>::ApplyDivergenceOperator(
     }
 
     // Get the cell gradient operator
-    Eigen::Array<double,8,3> cell_gradient_operator;
+    // Eigen::Array<double,8,3> cell_gradient_operator;
+    double cell_gradient_operator_data[24];
+    IncompressibleNavierStokesQ1P0StructuredElement::HexaVectorDataView cell_gradient_operator(cell_gradient_operator_data, 8, 3);
     IncompressibleNavierStokesQ1P0StructuredElement::GetCellGradientOperator(rCellSize[0], rCellSize[1], rCellSize[2], cell_gradient_operator);
 
     // Apply the gradient operator onto a vector
@@ -263,7 +275,9 @@ void Operators<2>::ApplyDivergenceOperator(
     }
 
     // Get the cell gradient operator
-    Eigen::Array<double,4,2> cell_gradient_operator;
+    // Eigen::Array<double,4,2> cell_gradient_operator;
+    double cell_gradient_operator_data[8];
+    IncompressibleNavierStokesQ1P0StructuredElement::QuadVectorDataView cell_gradient_operator(cell_gradient_operator_data, 4, 2);
     IncompressibleNavierStokesQ1P0StructuredElement::GetCellGradientOperator(rCellSize[0], rCellSize[1], cell_gradient_operator);
 
     // Apply the gradient operator onto a vector
@@ -300,7 +314,9 @@ void Operators<3>::ApplyDivergenceOperator(
     }
 
     // Get the cell gradient operator
-    Eigen::Array<double,8,3> cell_gradient_operator;
+    // Eigen::Array<double,8,3> cell_gradient_operator;
+    double cell_gradient_operator_data[24];
+    IncompressibleNavierStokesQ1P0StructuredElement::HexaVectorDataView cell_gradient_operator(cell_gradient_operator_data, 8, 3);
     IncompressibleNavierStokesQ1P0StructuredElement::GetCellGradientOperator(rCellSize[0], rCellSize[1], rCellSize[2], cell_gradient_operator);
 
     // Apply the gradient operator onto a vector
