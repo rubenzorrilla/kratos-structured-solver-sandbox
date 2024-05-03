@@ -409,6 +409,8 @@ int main()
         x_complex_new = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * num_cells);
         y_complex_new = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * num_cells);
 
+        //TODO: We should use the FFT for real numbers in here
+
         fftw_plan p_x;
         fftw_plan p_y;
         p_x = fftw_plan_dft(dim, box_divisions.data(), x_complex_new, fft_x_new, FFTW_FORWARD, FFTW_ESTIMATE);
@@ -429,7 +431,7 @@ int main()
             const double num = fft_y_new[i][0] * fft_x_new[i][0] + fft_y_new[i][1] * fft_x_new[i][1];
             const double den = std::pow(fft_x_new[i][0], 2) + std::pow(fft_x_new[i][1], 2);
             const double real_part = num / den; // Take the real part only (imaginary one is zero)
-            fft_c[i] = std::abs(real_part) > tol ? real_part : 0.0; // Remove the coefficient associated to the solution average
+            fft_c[i] = std::abs(real_part) < tol ? 1.0 : real_part; // Remove the coefficient associated to the solution average
         }
 
         fftw_destroy_plan(p_x);

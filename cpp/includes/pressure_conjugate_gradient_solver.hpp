@@ -205,6 +205,8 @@ private:
         //     rOutput[i] = sol[i].real();
         // }
 
+        //TODO: We should use the FFT for real numbers in here
+
         fftw_complex *fft_b;
         fftw_complex *b_complex;
         fft_b = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * mProblemSize);
@@ -231,15 +233,18 @@ private:
         for (unsigned int i = 0; i < mProblemSize; ++i) {
             const double num_real = fft_b[i][0] * mrFFTc[i]; // Note that in here we are assuming that the imaginary part of mrFFTc is zero
             const double num_imag = fft_b[i][1] * mrFFTc[i]; // Note that in here we are assuming that the imaginary part of mrFFTc is zero
-            const double den = std::pow(fft_b[i][0], 2); // Note that in here we are assuming that the imaginary part of mrFFTc is zero
+            const double den = std::pow(mrFFTc[i], 2); // Note that in here we are assuming that the imaginary part of mrFFTc is zero
             aux_complex[i][0] = num_real / den;
             aux_complex[i][1] = num_imag / den;
         }
 
         fftw_execute(p_aux);
 
+        // Set the output as the normalized IFFT
+        // Note from FFTW documentation "FFTW computes an unnormalized DFT.Thus, computing a forward
+        // followed by a backward transform (or vice versa) results in the original array scaled by n."
         for (unsigned int i = 0; i < mProblemSize; ++i) {
-            rOutput[i] = ifft_aux[i][0];
+            rOutput[i] = ifft_aux[i][0] / mProblemSize;
         }
 
         fftw_destroy_plan(p_b);
