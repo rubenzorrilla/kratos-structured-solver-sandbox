@@ -445,7 +445,7 @@ void Operators<TDim>::OutputPressureOperator(
     const std::string Filename,
     const std::string OutputPath)
 {
-// Allocate auxiliary data
+    // Allocate auxiliary data
     const unsigned int n_cells = std::get<1>(MeshUtilities<TDim>::CalculateMeshData(rBoxDivisions));
     std::vector<double> aux_vect(n_cells);
     std::vector<std::vector<double>> pressure_operator(n_cells);
