@@ -39,8 +39,15 @@ int main()
     // Material data
     const double mu = 2.0e-3;
     const double rho = 1.0e0;
-    const double sound_velocity = 1500;
-    const bool artificial_compressibility = false;
+    // const double sound_velocity = 1.0e3;
+    // const bool artificial_compressibility = false;
+
+    std::cout << "### PROBLEM DATA ###" << std::endl;
+    std::cout << "mu: " << mu << std::endl;
+    std::cout << "rho: " << rho << std::endl;
+    // if (artificial_compressibility) {
+    //     std::cout << "sound_velocity: " << sound_velocity << std::endl;
+    // }
 
     // Input mesh data
     const std::array<double, dim> box_size({1.0, 1.0});
@@ -52,7 +59,7 @@ int main()
     const int num_nodes = std::get<0>(mesh_data);
     const int num_cells = std::get<1>(mesh_data);
 
-    std::cout << "### MESH DATA ###" << std::endl;
+    std::cout << "\n### MESH DATA ###" << std::endl;
     std::cout << "num_nodes: " << num_nodes << std::endl;
     std::cout << "num_cells: " << num_cells << std::endl;
     if constexpr (dim == 2) {
@@ -77,7 +84,7 @@ int main()
     }
     std::cout << "Writing results to: " << results_path << std::endl;
 
-    const unsigned int output_interval = 100;
+    const unsigned int output_interval = 25;
     std::cout << "Writing interval: " << output_interval << std::endl;
 
     // Purge previous output
@@ -371,17 +378,31 @@ int main()
             }
         }
 
-        // TODO: TO BE REMOVED!
-        Operators<dim>::OutputPressureOperator(box_divisions, cell_size, periodic_lumped_mass_vector_inv, "pressure_matrix_without_bcs", results_path);
-        Operators<dim>::OutputPressureOperator(box_divisions, cell_size, active_cells, lumped_mass_vector_inv_bcs, "pressure_matrix", results_path);
-        // TODO: TO BE REMOVED!
+        // // TODO: TO BE REMOVED!
+        // Operators<dim>::OutputPressureOperator(box_divisions, cell_size, periodic_lumped_mass_vector_inv, "pressure_matrix_without_bcs", results_path);
+        // Operators<dim>::OutputPressureOperator(box_divisions, cell_size, active_cells, lumped_mass_vector_inv_bcs, "pressure_matrix", results_path);
+        // // TODO: TO BE REMOVED!
 
         const unsigned int free_cell_id = std::get<1>(free_cell_result);
         std::cout << "Free cell id: " << free_cell_id << "." <<std::endl;
         std::vector<double> x(num_cells, 0.0);
         std::vector<double> y(num_cells);
         x[free_cell_id] = 1.0;
-        Operators<dim>::ApplyPressureOperator(box_divisions, cell_size, periodic_lumped_mass_vector_inv, x, y);
+
+        // Operators<dim>::ApplyPressureOperator(box_divisions, cell_size, periodic_lumped_mass_vector_inv, x, y); //FIXME: Note that this function has no stabilization
+
+        PressureOperator<dim> pressure_operator(box_divisions, cell_size, active_cells, periodic_lumped_mass_vector_inv);
+        pressure_operator.Apply(x, y);
+
+        // std::unique_ptr<PressureOperator<dim>> p_pressure_operator;
+        // if (artificial_compressibility) {
+        //     auto p_aux = std::make_unique<PressureOperator<dim>>(rho, sound_velocity, box_divisions, cell_size, active_cells, periodic_lumped_mass_vector_inv);
+        //     std::swap(p_pressure_operator, p_aux);
+        // } else {
+        //     auto p_aux = std::make_unique<PressureOperator<dim>>(box_divisions, cell_size, active_cells, periodic_lumped_mass_vector_inv);
+        //     std::swap(p_pressure_operator, p_aux);
+        // }
+        // p_pressure_operator->Apply(x, y);
 
         // std::vector<std::complex<double>> fft_x(num_cells); // Complex array for FFT(x) output
         // std::vector<std::complex<double>> fft_y(num_cells); // Complex array for FFT(y) output
@@ -431,7 +452,12 @@ int main()
             const double num = fft_y_new[i][0] * fft_x_new[i][0] + fft_y_new[i][1] * fft_x_new[i][1];
             const double den = std::pow(fft_x_new[i][0], 2) + std::pow(fft_x_new[i][1], 2);
             const double real_part = num / den; // Take the real part only (imaginary one is zero)
-            fft_c[i] = std::abs(real_part) < tol ? 1.0 : real_part; // Remove the coefficient associated to the solution average
+            if (std::abs(real_part) < tol) {
+                std::cout << "Rigid body mode found in component: " << i << std::endl;
+                fft_c[i] = 1.0;
+            } else {
+                fft_c[i] = real_part;
+            }
         }
 
         fftw_destroy_plan(p_x);
@@ -468,19 +494,20 @@ int main()
     MatrixViewType delta_p_grad(delta_p_grad_data.data(), num_nodes, dim);
 
     std::cout << "\n### PRESSURE SOLVER SET-UP ###" << std::endl;
-    const double abs_tol = 1.0e-5;
-    const double rel_tol = 1.0e-3;
+    const double abs_tol = 1.0e-7;
+    const double rel_tol = 1.0e-5;
     const double max_iter = 5000;
-    std::unique_ptr<PressureOperator<dim>> p_pressure_operator;
-    if (artificial_compressibility) {
-        auto p_aux = std::make_unique<PressureOperator<dim>>(rho, sound_velocity, box_divisions, cell_size, active_cells, lumped_mass_vector_inv_bcs);
-        std::swap(p_pressure_operator, p_aux);
-    } else {
-        auto p_aux = std::make_unique<PressureOperator<dim>>(box_divisions, cell_size, active_cells, lumped_mass_vector_inv_bcs);
-        std::swap(p_pressure_operator, p_aux);
-    }
+    // std::unique_ptr<PressureOperator<dim>> p_pressure_operator;
+    // if (artificial_compressibility) {
+    //     auto p_aux = std::make_unique<PressureOperator<dim>>(rho, sound_velocity, box_divisions, cell_size, active_cells, lumped_mass_vector_inv_bcs);
+    //     std::swap(p_pressure_operator, p_aux);
+    // } else {
+    //     auto p_aux = std::make_unique<PressureOperator<dim>>(box_divisions, cell_size, active_cells, lumped_mass_vector_inv_bcs);
+    //     std::swap(p_pressure_operator, p_aux);
+    // }
+    PressureOperator<dim> pressure_operator(box_divisions, cell_size, active_cells, lumped_mass_vector_inv_bcs);
     std::cout << "Pressure linear operator created." << std::endl;
-    PressureConjugateGradientSolver<dim> cg(abs_tol, rel_tol, max_iter, *p_pressure_operator, fft_c);
+    PressureConjugateGradientSolver<dim> cg(abs_tol, rel_tol, max_iter, pressure_operator, fft_c);
     std::cout << "Pressure conjugate gradient solver created." << std::endl;
 
     // Time loop
@@ -493,8 +520,8 @@ int main()
         const double dt = TimeUtilities<dim>::CalculateDeltaTime(rho, mu, cell_size, v, 0.2, 0.2);
         std::cout << "\n### Step " << current_step << " - time " << current_time << " - dt " << dt << " ###" << std::endl;
 
-        // Set current time increment into the pressure operator object
-        p_pressure_operator->SetDeltaTime(dt);
+        // // Set current time increment into the pressure operator object
+        // p_pressure_operator->SetDeltaTime(dt);
 
         // Update the surrogate boundary Dirichlet value from the previous time step velocity gradient
         SbmUtilities<dim>::UpdateSurrogateBoundaryDirichletValues(mass_factor, box_divisions, cell_size, surrogate_cells, surrogate_nodes, lumped_mass_vector, distance_vects, v, v_surrogate);
@@ -603,8 +630,11 @@ int main()
         // Solve pressure update
         Operators<dim>::ApplyDivergenceOperator(box_divisions, cell_size, active_cells, v, delta_p_rhs);
         //TODO: Do something to skip this loop (maybe a pass a factor to ApplyDivergenceOperator)
+        // const double mass_factor = std::reduce(cell_size.begin(), cell_size.end(), 1.0, std::multiplies<>());
+        // const double bulk_factor = mass_factor / (rho * std::pow(sound_velocity, 2));
         for (unsigned int i = 0; i < num_cells; ++i) {
-            delta_p_rhs[i] = -delta_p_rhs[i];
+            delta_p_rhs[i] = -delta_p_rhs[i] / dt;
+            // delta_p_rhs[i] += bulk_factor * p[i];
         }
 
         // TODO: TO BE REMOVED!
@@ -710,6 +740,7 @@ int main()
 
     // Print final data
     std::cout << "TOTAL PRESSURE ITERATIONS: " << tot_p_iters << std::endl;
+    std::cout << "AVERAGE PRESSURE ITERATIONS: " << tot_p_iters / current_step << std::endl;
 
     return 0;
 }
