@@ -250,6 +250,13 @@ private:
 
         fftw_destroy_plan(p_b);
         fftw_destroy_plan(p_aux);
+
+        //TODO: Allocate/free this once
+        fftw_free(fft_b);
+        fftw_free(b_complex);
+        fftw_free(ifft_aux);
+        fftw_free(aux_complex);
+
     }
 
 };
