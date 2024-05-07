@@ -46,4 +46,9 @@ public:
     static std::tuple<bool, unsigned int> FindFirstFreeCellId(
         const std::array<int, TDim> &rBoxDivisions,
         const FixityMatrixViewType& rFixity);
+
+    static void OutputVector(
+        const std::vector<double>& rVector,
+        const std::string Filename,
+        const std::string OutputPath = "");
 };

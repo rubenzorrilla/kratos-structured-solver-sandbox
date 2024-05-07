@@ -1,3 +1,4 @@
+#include <fstream>
 #include <iostream>
 
 #include "cell_utilities.hpp"
@@ -267,6 +268,33 @@ std::tuple<bool, unsigned int> MeshUtilities<3>::FindFirstFreeCellId(
     }
 
     return std::make_tuple(false, 0);
+}
+
+template<int TDim>
+void MeshUtilities<TDim>::OutputVector(
+    const std::vector<double>& rVector,
+    const std::string Filename,
+    const std::string OutputPath)
+{
+    const double aux_tol = 1.0e-14;
+    std::vector<std::tuple<unsigned int, double>> non_zero_entries;
+    for (unsigned int i = 0; i < rVector.size(); ++i) {
+        if (std::abs(rVector[i]) > aux_tol) {
+            non_zero_entries.push_back(std::make_tuple(i, rVector[i]));
+        }
+    }
+
+    std::ofstream out_file(OutputPath + Filename + ".mm");
+    if (out_file.is_open()) {
+        out_file << "%%MatrixMarket matrix coordinate real general" << std::endl;
+        out_file << rVector.size() << "  " << 1 << "  " << non_zero_entries.size() << std::endl;
+        for (auto& r_non_zero_entry : non_zero_entries) {
+            const unsigned int row = std::get<0>(r_non_zero_entry);
+            const double val = std::get<1>(r_non_zero_entry);
+            out_file << row + 1 << "  " << 1 << "  " << val << std::endl;
+        }
+        out_file.close();
+    }
 }
 
 template class MeshUtilities<2>;
