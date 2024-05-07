@@ -7,6 +7,7 @@
 #include <fftw3.h>
 
 #include "mesh_utilities.hpp"
+#include "pressure_preconditioner.hpp"
 #include "pressure_operator.hpp"
 #include "operators.hpp"
 
@@ -26,18 +27,36 @@ public:
         const double RelTol,
         const unsigned int MaxIter,
         const PressureOperator<TDim>& rPressureOperator,
-        const VectorType& rFFTc)
+        const std::shared_ptr<PressurePreconditioner<TDim>>& rpPressurePreconditioner)
         : mAbsTol(AbsTol)
         , mRelTol(RelTol)
         , mMaxIter(MaxIter)
         , mrPressureOperator(rPressureOperator)
-        , mrFFTc(rFFTc)
+        , mpPressurePreconditioner(rpPressurePreconditioner)
     {
         if (!mrPressureOperator.IsInitialized()) {
             std::cerr << "Provided pressure operator is not initialized." << std::endl;
         }
         mProblemSize = mrPressureOperator.ProblemSize();
     }
+
+    // PressureConjugateGradientSolver(
+    //     const double AbsTol,
+    //     const double RelTol,
+    //     const unsigned int MaxIter,
+    //     const PressureOperator<TDim>& rPressureOperator,
+    //     const Press& rFFTc)
+    //     : mAbsTol(AbsTol)
+    //     , mRelTol(RelTol)
+    //     , mMaxIter(MaxIter)
+    //     , mrPressureOperator(rPressureOperator)
+    //     , mrFFTc(rFFTc)
+    // {
+    //     if (!mrPressureOperator.IsInitialized()) {
+    //         std::cerr << "Provided pressure operator is not initialized." << std::endl;
+    //     }
+    //     mProblemSize = mrPressureOperator.ProblemSize();
+    // }
 
     const unsigned int Iterations() const
     {
@@ -161,7 +180,9 @@ private:
 
     const PressureOperator<TDim>& mrPressureOperator;
 
-    const VectorType& mrFFTc;
+    const std::shared_ptr<PressurePreconditioner<TDim>>& mpPressurePreconditioner;
+
+    // const VectorType& mrFFTc;
 
     double ComputeResidualNorm(const VectorType& rRes)
     {
@@ -189,6 +210,8 @@ private:
         const VectorType& rInput,
         VectorType& rOutput)
     {
+        mpPressurePreconditioner->Apply(rInput, rOutput);
+
         // std::vector<std::complex<double>> fft_b(mProblemSize);     // Complex array for FFT(x) output
         // std::vector<std::complex<double>> b_complex(mProblemSize); // Complex array for FFT(x) input
         // for (unsigned int i = 0; i < mProblemSize; ++i) {
@@ -208,55 +231,54 @@ private:
 
         //TODO: We should use the FFT for real numbers in here
 
-        fftw_complex *fft_b;
-        fftw_complex *b_complex;
-        fft_b = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * mProblemSize);
-        b_complex = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * mProblemSize);
+        // fftw_complex *fft_b;
+        // fftw_complex *b_complex;
+        // fft_b = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * mProblemSize);
+        // b_complex = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * mProblemSize);
 
-        fftw_plan p_b;
-        p_b = fftw_plan_dft(TDim, mrPressureOperator.GetBoxDivisions().data(), b_complex, fft_b, FFTW_FORWARD, FFTW_ESTIMATE);
+        // fftw_plan p_b;
+        // p_b = fftw_plan_dft(TDim, mrPressureOperator.GetBoxDivisions().data(), b_complex, fft_b, FFTW_FORWARD, FFTW_ESTIMATE);
 
-        for (unsigned int i = 0; i < mProblemSize; ++i) {
-            b_complex[i][0] = rInput[i]; // Setting real part
-            b_complex[i][1] = 0.0; // Setting imaginary part
-        }
+        // for (unsigned int i = 0; i < mProblemSize; ++i) {
+        //     b_complex[i][0] = rInput[i]; // Setting real part
+        //     b_complex[i][1] = 0.0; // Setting imaginary part
+        // }
 
-        fftw_execute(p_b);
+        // fftw_execute(p_b);
 
-        fftw_complex *ifft_aux;
-        fftw_complex *aux_complex;
-        ifft_aux = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * mProblemSize);
-        aux_complex = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * mProblemSize);
+        // fftw_complex *ifft_aux;
+        // fftw_complex *aux_complex;
+        // ifft_aux = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * mProblemSize);
+        // aux_complex = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * mProblemSize);
 
-        fftw_plan p_aux;
-        p_aux = fftw_plan_dft(TDim, mrPressureOperator.GetBoxDivisions().data(), aux_complex, ifft_aux, FFTW_BACKWARD, FFTW_ESTIMATE);
+        // fftw_plan p_aux;
+        // p_aux = fftw_plan_dft(TDim, mrPressureOperator.GetBoxDivisions().data(), aux_complex, ifft_aux, FFTW_BACKWARD, FFTW_ESTIMATE);
 
-        for (unsigned int i = 0; i < mProblemSize; ++i) {
-            const double num_real = fft_b[i][0] * mrFFTc[i]; // Note that in here we are assuming that the imaginary part of mrFFTc is zero
-            const double num_imag = fft_b[i][1] * mrFFTc[i]; // Note that in here we are assuming that the imaginary part of mrFFTc is zero
-            const double den = std::pow(mrFFTc[i], 2); // Note that in here we are assuming that the imaginary part of mrFFTc is zero
-            aux_complex[i][0] = num_real / den;
-            aux_complex[i][1] = num_imag / den;
-        }
+        // for (unsigned int i = 0; i < mProblemSize; ++i) {
+        //     const double num_real = fft_b[i][0] * mrFFTc[i]; // Note that in here we are assuming that the imaginary part of mrFFTc is zero
+        //     const double num_imag = fft_b[i][1] * mrFFTc[i]; // Note that in here we are assuming that the imaginary part of mrFFTc is zero
+        //     const double den = std::pow(mrFFTc[i], 2); // Note that in here we are assuming that the imaginary part of mrFFTc is zero
+        //     aux_complex[i][0] = num_real / den;
+        //     aux_complex[i][1] = num_imag / den;
+        // }
 
-        fftw_execute(p_aux);
+        // fftw_execute(p_aux);
 
-        // Set the output as the normalized IFFT
-        // Note from FFTW documentation "FFTW computes an unnormalized DFT.Thus, computing a forward
-        // followed by a backward transform (or vice versa) results in the original array scaled by n."
-        for (unsigned int i = 0; i < mProblemSize; ++i) {
-            rOutput[i] = ifft_aux[i][0] / mProblemSize;
-        }
+        // // Set the output as the normalized IFFT
+        // // Note from FFTW documentation "FFTW computes an unnormalized DFT.Thus, computing a forward
+        // // followed by a backward transform (or vice versa) results in the original array scaled by n."
+        // for (unsigned int i = 0; i < mProblemSize; ++i) {
+        //     rOutput[i] = ifft_aux[i][0] / mProblemSize;
+        // }
 
-        fftw_destroy_plan(p_b);
-        fftw_destroy_plan(p_aux);
+        // fftw_destroy_plan(p_b);
+        // fftw_destroy_plan(p_aux);
 
-        //TODO: Allocate/free this once
-        fftw_free(fft_b);
-        fftw_free(b_complex);
-        fftw_free(ifft_aux);
-        fftw_free(aux_complex);
-
+        // //TODO: Allocate/free this once
+        // fftw_free(fft_b);
+        // fftw_free(b_complex);
+        // fftw_free(ifft_aux);
+        // fftw_free(aux_complex);
     }
 
 };

@@ -1,7 +1,6 @@
 #include <array>
 #include <string>
 #include <sstream>
-#include <fstream>
 #include <numeric>
 #include <iostream>
 #include <unistd.h>
@@ -12,11 +11,13 @@
 #include "include/experimental/mdspan"
 
 #include "cell_utilities.hpp"
+#include "fft_pressure_preconditioner.hpp"
 #include "incompressible_navier_stokes_q1_p0_structured_element.hpp"
 #include "mdspan_utilities.hpp"
 #include "mesh_utilities.hpp"
 #include "operators.hpp"
 #include "pressure_conjugate_gradient_solver.hpp"
+#include "pressure_preconditioner.hpp"
 #include "runge_kutta_utilities.hpp"
 #include "sbm_utilities.hpp"
 #include "time_utilities.hpp"
@@ -49,9 +50,21 @@ int main()
     //     std::cout << "sound_velocity: " << sound_velocity << std::endl;
     // }
 
+    std::string pres_prec_type = "fft"; //options: "identity" and "fft"
+    const double pres_abs_tol = 1.0e-7;
+    const double pres_rel_tol = 1.0e-7;
+    const double pres_max_iter = 5000;
+    const bool output_pressure_arrays = false;
+    std::cout << "\n### PRESSURE LINEAR SOLVER DATA ###" << std::endl;
+    std::cout << "prec_type: " << pres_prec_type << std::endl;
+    std::cout << "abs_tol: " << pres_abs_tol << std::endl;
+    std::cout << "rel_tol: " << pres_rel_tol << std::endl;
+    std::cout << "max_iter: " << pres_max_iter << std::endl;
+    std::cout << "output_pressure_arrays: " << (output_pressure_arrays ? "true" : "false") << std::endl;
+
     // Input mesh data
     const std::array<double, dim> box_size({1.0, 1.0});
-    const std::array<int, dim> box_divisions({100, 100});
+    const std::array<int, dim> box_divisions({128, 128});
 
     // Compute mesh data
     auto mesh_data = MeshUtilities<dim>::CalculateMeshData(box_divisions);
@@ -63,8 +76,10 @@ int main()
     std::cout << "num_nodes: " << num_nodes << std::endl;
     std::cout << "num_cells: " << num_cells << std::endl;
     if constexpr (dim == 2) {
+        std::cout << "box_divisions: [" << box_divisions[0] << "," << box_divisions[1] << "]" << std::endl;
         std::cout << "cell_size: [" << cell_size[0] << "," << cell_size[1] << "]" << std::endl;
     } else {
+        std::cout << "box_divisions: [" << box_divisions[0] << "," << box_divisions[1] << "," << box_divisions[2] <<  "]" << std::endl;
         std::cout << "cell_size: [" << cell_size[0] << "," << cell_size[1] << "," << cell_size[2] <<  "]" << std::endl;
     }
 
@@ -356,118 +371,6 @@ int main()
         lumped_mass_vector_inv_bcs(fixed_dofs_rows[i_dof], fixed_dofs_cols[i_dof]) = 0.0;
     }
 
-    // Create the preconditioner for the pressure CG solver
-    // For this we convert the periodic pressure matrix C (with no velocity BCs) to FFT
-    // The simplest way is to generate any vector x, compute the image vector y=C*X
-    // The transform of C is fft(y)./fft(x), as C is cyclic the transformed C must be diagonal
-    // The resulting transformed coefficientes should be real, because the operator is symmetric.
-    // Also it should be semidefinite positive (SPD) because the Laplacian operator is SPD
-    // The first coefficient is null, because the Laplacian is not PD, just SPD.
-    // But we can replace this null coefficient by anything different from 0.
-    // At most it would degrade the convergence of the PCG, but we will see that the convergence is OK.
-    std::cout << "\n### PRESSURE PRECONDITIONER SET-UP ###" << std::endl;
-    std::vector<double> fft_c(num_cells);
-    auto free_cell_result = MeshUtilities<dim>::FindFirstFreeCellId(box_divisions, fixity);
-    if (std::get<0>(free_cell_result)) {
-        double periodic_lumped_mass_data_inv[num_nodes * dim];
-        MatrixViewType periodic_lumped_mass_vector_inv(periodic_lumped_mass_data_inv, num_nodes, dim);
-        MeshUtilities<dim>::CalculateLumpedMassVector(mass_factor, box_divisions, periodic_lumped_mass_vector_inv);
-        for (unsigned int i_node = 0; i_node < num_nodes; ++i_node) {
-            for (unsigned int d = 0; d < dim; ++d) {
-                periodic_lumped_mass_vector_inv(i_node, d) = 1.0 / periodic_lumped_mass_vector_inv(i_node, d);
-            }
-        }
-
-        // // TODO: TO BE REMOVED!
-        // Operators<dim>::OutputPressureOperator(box_divisions, cell_size, periodic_lumped_mass_vector_inv, "pressure_matrix_without_bcs", results_path);
-        // Operators<dim>::OutputPressureOperator(box_divisions, cell_size, active_cells, lumped_mass_vector_inv_bcs, "pressure_matrix", results_path);
-        // // TODO: TO BE REMOVED!
-
-        const unsigned int free_cell_id = std::get<1>(free_cell_result);
-        std::cout << "Free cell id: " << free_cell_id << "." <<std::endl;
-        std::vector<double> x(num_cells, 0.0);
-        std::vector<double> y(num_cells);
-        x[free_cell_id] = 1.0;
-
-        // Operators<dim>::ApplyPressureOperator(box_divisions, cell_size, periodic_lumped_mass_vector_inv, x, y); //FIXME: Note that this function has no stabilization
-
-        PressureOperator<dim> pressure_operator(box_divisions, cell_size, active_cells, periodic_lumped_mass_vector_inv);
-        pressure_operator.Apply(x, y);
-
-        // std::unique_ptr<PressureOperator<dim>> p_pressure_operator;
-        // if (artificial_compressibility) {
-        //     auto p_aux = std::make_unique<PressureOperator<dim>>(rho, sound_velocity, box_divisions, cell_size, active_cells, periodic_lumped_mass_vector_inv);
-        //     std::swap(p_pressure_operator, p_aux);
-        // } else {
-        //     auto p_aux = std::make_unique<PressureOperator<dim>>(box_divisions, cell_size, active_cells, periodic_lumped_mass_vector_inv);
-        //     std::swap(p_pressure_operator, p_aux);
-        // }
-        // p_pressure_operator->Apply(x, y);
-
-        // std::vector<std::complex<double>> fft_x(num_cells); // Complex array for FFT(x) output
-        // std::vector<std::complex<double>> fft_y(num_cells); // Complex array for FFT(y) output
-        // std::vector<std::complex<double>> x_complex(num_cells); // Complex array for FFT(x) input
-        // std::vector<std::complex<double>> y_complex(num_cells); // Complex array for FFT(y) input
-        // for (unsigned int i = 0; i < num_cells; ++i) {
-        //     x_complex[i].real(x[i]); // Set x_complex real data from x
-        //     y_complex[i].real(y[i]); // Set y_complex real data from y
-        // }
-
-        // Eigen::FFT<double> fft;
-        // fft.fwd(fft_x, x_complex);
-        // fft.fwd(fft_y, y_complex);
-        // for (unsigned int i = 0; i < num_cells; ++i) {
-        //     fft_c[i] = (fft_y[i] / fft_x[i]).real(); // Take the real part only (imaginary one is zero)
-        // }
-        // fft_c[0] = 1.0; // Remove the first coefficient as this is associated to the solution average
-
-        fftw_complex *fft_x_new;
-        fftw_complex *fft_y_new;
-        fftw_complex *x_complex_new;
-        fftw_complex *y_complex_new;
-        fft_x_new = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * num_cells);
-        fft_y_new = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * num_cells);
-        x_complex_new = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * num_cells);
-        y_complex_new = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * num_cells);
-
-        //TODO: We should use the FFT for real numbers in here
-
-        fftw_plan p_x;
-        fftw_plan p_y;
-        p_x = fftw_plan_dft(dim, box_divisions.data(), x_complex_new, fft_x_new, FFTW_FORWARD, FFTW_ESTIMATE);
-        p_y = fftw_plan_dft(dim, box_divisions.data(), y_complex_new, fft_y_new, FFTW_FORWARD, FFTW_ESTIMATE);
-
-        for (unsigned int i = 0; i < num_cells; ++i) {
-            x_complex_new[i][0] = x[i]; // Setting real part
-            x_complex_new[i][1] = 0.0; // Setting imaginary part
-            y_complex_new[i][0] = y[i]; // Setting real part
-            y_complex_new[i][1] = 0.0; // Setting imaginary part
-        }
-
-        fftw_execute(p_x);
-        fftw_execute(p_y);
-
-        const double tol = 1.0e-15;
-        for (unsigned int i = 0; i < num_cells; ++i) {
-            const double num = fft_y_new[i][0] * fft_x_new[i][0] + fft_y_new[i][1] * fft_x_new[i][1];
-            const double den = std::pow(fft_x_new[i][0], 2) + std::pow(fft_x_new[i][1], 2);
-            const double real_part = num / den; // Take the real part only (imaginary one is zero)
-            if (std::abs(real_part) < tol) {
-                std::cout << "Rigid body mode found in component: " << i << std::endl;
-                fft_c[i] = 1.0;
-            } else {
-                fft_c[i] = real_part;
-            }
-        }
-
-        fftw_destroy_plan(p_x);
-        fftw_destroy_plan(p_y);
-
-        std::cout << "Pressure preconditioner set." << std::endl;
-    } else {
-        std::cout << "There is no cell with all the DOFs free. No pressure preconditioner can be set." << std::endl;
-    }
-
     // Set Runge-Kutta arrays
     constexpr int rk_order = 4;
     RungeKuttaUtilities<rk_order>::RungeKuttaVector rk_B;
@@ -493,10 +396,27 @@ int main()
     std::vector<double> delta_p_grad_data(num_nodes * dim, 0.0);
     MatrixViewType delta_p_grad(delta_p_grad_data.data(), num_nodes, dim);
 
+    // Create the preconditioner for the pressure CG solver
+    // For this we convert the periodic pressure matrix C (with no velocity BCs) to FFT
+    // The simplest way is to generate any vector x, compute the image vector y=C*X
+    // The transform of C is fft(y)./fft(x), as C is cyclic the transformed C must be diagonal
+    // The resulting transformed coefficientes should be real, because the operator is symmetric.
+    // Also it should be semidefinite positive (SPD) because the Laplacian operator is SPD
+    // The first coefficient is null, because the Laplacian is not PD, just SPD.
+    // But we can replace this null coefficient by anything different from 0.
+    // At most it would degrade the convergence of the PCG, but we will see that the convergence is OK.
+    std::cout << "\n### PRESSURE PRECONDITIONER SET-UP ###" << std::endl;
+    std::shared_ptr<PressurePreconditioner<dim>> p_pressure_preconditioner = nullptr;
+    if (pres_prec_type == "fft") {
+        std::shared_ptr<PressurePreconditioner<dim>> p_aux = std::make_unique<FftPressurePreconditioner<dim>>(box_divisions, cell_size, fixity, mass_factor);
+        std::swap(p_aux, p_pressure_preconditioner);
+    } else {
+        std::shared_ptr<PressurePreconditioner<dim>> p_aux = std::make_unique<PressurePreconditioner<dim>>();
+        std::swap(p_aux, p_pressure_preconditioner);
+    }
+    p_pressure_preconditioner->SetUp();
+
     std::cout << "\n### PRESSURE SOLVER SET-UP ###" << std::endl;
-    const double abs_tol = 1.0e-7;
-    const double rel_tol = 1.0e-5;
-    const double max_iter = 5000;
     // std::unique_ptr<PressureOperator<dim>> p_pressure_operator;
     // if (artificial_compressibility) {
     //     auto p_aux = std::make_unique<PressureOperator<dim>>(rho, sound_velocity, box_divisions, cell_size, active_cells, lumped_mass_vector_inv_bcs);
@@ -506,8 +426,12 @@ int main()
     //     std::swap(p_pressure_operator, p_aux);
     // }
     PressureOperator<dim> pressure_operator(box_divisions, cell_size, active_cells, lumped_mass_vector_inv_bcs);
+    if (output_pressure_arrays) {
+        pressure_operator.Output("pressure_matrix" + std::to_string(box_divisions[0]) + "_" + std::to_string(box_divisions[1]), results_path);
+    }
     std::cout << "Pressure linear operator created." << std::endl;
-    PressureConjugateGradientSolver<dim> cg(abs_tol, rel_tol, max_iter, pressure_operator, fft_c);
+
+    PressureConjugateGradientSolver<dim> cg(pres_abs_tol, pres_rel_tol, pres_max_iter, pressure_operator, p_pressure_preconditioner);
     std::cout << "Pressure conjugate gradient solver created." << std::endl;
 
     // Time loop
@@ -636,29 +560,9 @@ int main()
             delta_p_rhs[i] = -delta_p_rhs[i] / dt;
             // delta_p_rhs[i] += bulk_factor * p[i];
         }
-
-        // TODO: TO BE REMOVED!
-        // // Output the non-zero entries in (plain) matrix market format
-        // const double aux_tol = 1.0e-14;
-        // std::vector<std::tuple<unsigned int, double>> non_zero_entries;
-        // for (unsigned int i = 0; i < num_cells; ++i) {
-        //     if (std::abs(delta_p_rhs[i]) > aux_tol) {
-        //         non_zero_entries.push_back(std::make_tuple(i, delta_p_rhs[i]));
-        //     }
-        // }
-
-        // std::ofstream out_file(results_path + "b.mm");
-        // if (out_file.is_open()) {
-        //     out_file << "%%MatrixMarket matrix coordinate real general" << std::endl;
-        //     out_file << num_cells << "  " << 1 << "  " << non_zero_entries.size() << std::endl;
-        //     for (auto& r_non_zero_entry : non_zero_entries) {
-        //         const unsigned int row = std::get<0>(r_non_zero_entry);
-        //         const double val = std::get<1>(r_non_zero_entry);
-        //         out_file << row + 1 << "  " << 1 << "  " << val << std::endl;
-        //     }
-        //     out_file.close();
-        // }
-        // TODO: TO BE REMOVED!
+        if (output_pressure_arrays) {
+            MeshUtilities<dim>::OutputVector(delta_p_rhs, "b" + std::to_string(box_divisions[0]) + "_" + std::to_string(box_divisions[1]) + "_" + std::to_string(current_step), results_path);
+        }
 
         std::fill(delta_p.begin(), delta_p.end(), 0.0);
         const bool is_converged = cg.Solve(delta_p_rhs, delta_p);
@@ -671,24 +575,6 @@ int main()
         } else {
             std::cout << "Pressure problem did not converge in " << cg.Iterations() << " iterations." << std::endl;
         }
-
-        // // TODO: TO BE REMOVED!
-        // const double w = 0.5;
-        // std::vector<double> aux(num_cells, 0.0);
-        // std::fill(delta_p.begin(), delta_p.end(), 0.0);
-        // for (unsigned int it = 0; it < 500000; ++it) {
-        //     double norm_res = 0.0;
-        //     std::fill(aux.begin(), aux.end(), 0.0);
-        //     Operators<dim>::ApplyPressureOperator(box_divisions, cell_size, active_cells, lumped_mass_vector_inv_bcs, delta_p, aux);
-        //     for (unsigned int i = 0; i < num_cells; ++i) {
-        //         const double aux_res = delta_p_rhs[i] - aux[i];
-        //         delta_p[i] += w * aux_res;
-        //         norm_res += std::pow(aux_res, 2);
-        //     }
-        //     norm_res = std::sqrt(norm_res);
-        //     std::cout << "it: " << it << " norm_res: " << norm_res << std::endl;
-        // }
-        // // TODO: TO BE REMOVED!
 
         // Correct velocity
         Operators<dim>::ApplyGradientOperator(box_divisions, cell_size, active_cells, delta_p, delta_p_grad);
@@ -736,7 +622,12 @@ int main()
         }
         ++current_step;
         current_time += dt;
+
+        return 0;
     }
+
+    // Clear memory
+    p_pressure_preconditioner->Clear();
 
     // Print final data
     std::cout << "TOTAL PRESSURE ITERATIONS: " << tot_p_iters << std::endl;
