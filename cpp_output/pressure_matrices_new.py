@@ -11,8 +11,8 @@ def nonlocal_iterate(arr):
     p_iters += 1
 
 # Mesh size
-x_divisions = 3
-y_divisions = 3
+x_divisions = 8
+y_divisions = 8
 
 # Parsing pressure matrices and right hand side
 b_name = f'b_{x_divisions}_{y_divisions}_1.mm'
@@ -28,6 +28,12 @@ pressure_matrix = scipy.io.mmread(pressure_matrix_name)
 pressure_matrix = pressure_matrix.tocsr()
 print(f"{pressure_matrix_name} imported.")
 
+# pressure_matrix_name_py = f'pressure_matrix_{8}_{8}_py.mtx'
+# print(f"\nReading {pressure_matrix_name_py}...")
+# pressure_matrix_py = scipy.sparse.csr_matrix(scipy.io.mmread(pressure_matrix_name_py))
+# print(f"{pressure_matrix_name_py} imported.")
+# print(f"Python vs. ccp pressure matrix (nonzeros): {(pressure_matrix - pressure_matrix_py).count_nonzero()}")
+
 # plt.spy(pressure_matrix)
 # plt.show()
 
@@ -35,7 +41,7 @@ print(f"{pressure_matrix_name} imported.")
 # plt.colorbar()
 # plt.show()
 
-print(pressure_matrix)
+# print(pressure_matrix)
 
 plt.matshow(pressure_matrix.toarray())
 plt.colorbar()
