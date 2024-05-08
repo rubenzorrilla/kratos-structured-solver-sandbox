@@ -493,6 +493,14 @@ def prod(x):
 
 pressure_op = scipy.sparse.linalg.LinearOperator((num_cells,num_cells), matvec=prod)
 
+# # Extract pressure matrix
+# pressure_matrix = np.zeros(shape=(num_cells, num_cells))
+# for i in range(num_cells):
+#     aux_vect = np.zeros(num_cells)
+#     aux_vect[i] = 1.0
+#     pressure_matrix[:,i] = ApplyPressureOperator(aux_vect, lumped_mass_vector_inv_bcs)
+# scipy.io.mmwrite(f"../cpp_output/pressure_matrix_{box_divisions[0]}_{box_divisions[1]}_py", pressure_matrix)
+
 # Time loop
 tot_p_iters = 0
 current_step = 1
