@@ -6,5 +6,6 @@
 *.res
 *.msh
 *.mm
+*.mtx
 cpp/bin
 cpp/build
