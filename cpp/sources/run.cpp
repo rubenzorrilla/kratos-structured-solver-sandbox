@@ -427,7 +427,7 @@ int main()
     // }
     PressureOperator<dim> pressure_operator(box_divisions, cell_size, active_cells, lumped_mass_vector_inv_bcs);
     if (output_pressure_arrays) {
-        pressure_operator.Output("pressure_matrix" + std::to_string(box_divisions[0]) + "_" + std::to_string(box_divisions[1]), results_path);
+        pressure_operator.Output("pressure_matrix_" + std::to_string(box_divisions[0]) + "_" + std::to_string(box_divisions[1]), results_path);
     }
     std::cout << "Pressure linear operator created." << std::endl;
 
@@ -561,7 +561,7 @@ int main()
             // delta_p_rhs[i] += bulk_factor * p[i];
         }
         if (output_pressure_arrays) {
-            MeshUtilities<dim>::OutputVector(delta_p_rhs, "b" + std::to_string(box_divisions[0]) + "_" + std::to_string(box_divisions[1]) + "_" + std::to_string(current_step), results_path);
+            MeshUtilities<dim>::OutputVector(delta_p_rhs, "b_" + std::to_string(box_divisions[0]) + "_" + std::to_string(box_divisions[1]) + "_" + std::to_string(current_step), results_path);
         }
 
         std::fill(delta_p.begin(), delta_p.end(), 0.0);
