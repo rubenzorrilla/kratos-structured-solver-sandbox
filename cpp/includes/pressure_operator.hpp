@@ -118,8 +118,8 @@ public:
         // }
 
         // const double tau = 1.0e-3;
-        // for (unsigned int i = 0; i < mrBoxDivisions[0]; ++i) {
-        //     for (unsigned int j = 0; j < mrBoxDivisions[1]; ++j) {
+        // for (unsigned int i = 0; i < mrBoxDivisions[1]; ++i) {
+        //     for (unsigned int j = 0; j < mrBoxDivisions[0]; ++j) {
         //         double temp = 0.0;
         //         unsigned int cell_id = CellUtilities::GetCellGlobalId(i, j, mrBoxDivisions);
         //         if (mrActiveCells[cell_id]) {

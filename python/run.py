@@ -590,6 +590,9 @@ while current_time < end_time:
     tot_p_iters += p_iters
     print(f"Pressure iterations: {p_iters}.")
 
+    # # Extract pressure RHS
+    # scipy.io.mmwrite(f"../cpp_output/b_{box_divisions[0]}_{box_divisions[1]}_{current_step}_py", np.matrix(delta_p_rhs))
+
     # Correct velocity
     v[free_dofs] += dt * lumped_mass_vector_inv[free_dofs] * ApplyGradientOperator(delta_p)[free_dofs]
     print("Velocity update finished.\n")

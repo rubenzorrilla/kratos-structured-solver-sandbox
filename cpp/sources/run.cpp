@@ -64,7 +64,7 @@ int main()
 
     // Input mesh data
     const std::array<double, dim> box_size({1.0, 1.0});
-    const std::array<int, dim> box_divisions({128, 128});
+    const std::array<int, dim> box_divisions({3, 3});
 
     // Compute mesh data
     auto mesh_data = MeshUtilities<dim>::CalculateMeshData(box_divisions);
@@ -370,6 +370,66 @@ int main()
     for (unsigned int i_dof = 0; i_dof < n_fixed_dofs; ++i_dof) {
         lumped_mass_vector_inv_bcs(fixed_dofs_rows[i_dof], fixed_dofs_cols[i_dof]) = 0.0;
     }
+
+    // TODO: Remove from here ...
+    // Check G
+    std::vector<double> aux_ones(num_cells);
+    for (unsigned int i = 0; i < num_cells; ++i) {
+        aux_ones[i] = 1.0;
+    }
+    std::vector<double> aux_grad_output_data(num_nodes * dim);
+    MatrixViewType aux_grad_output(aux_grad_output_data.data(), num_nodes, dim);
+    Operators<dim>::ApplyGradientOperator(box_divisions, cell_size, aux_ones, aux_grad_output);
+    for (unsigned int i = 0; i < num_nodes; ++i) {
+        std::cout << "G(" << i << "): " << aux_grad_output(i,0)  << " - " << aux_grad_output(i,1) << std::endl;
+    }
+
+    // Check D
+    std::vector<double> aux_div_output(num_cells);
+    std::vector<double> aux_div_input_data(num_nodes * dim);
+    MatrixViewType aux_div_input(aux_div_input_data.data(), num_nodes, dim);
+    for (unsigned int i = 0; i < num_nodes; ++i) {
+        // aux_div_input(i,0) = 1.0;
+        // aux_div_input(i,1) = 0.0;
+        aux_div_input(i,0) = 0.0;
+        aux_div_input(i,1) = 1.0;
+    }
+    Operators<dim>::ApplyDivergenceOperator(box_divisions, cell_size, aux_div_input, aux_div_output);
+    std::cout << std::endl;
+    for (unsigned int i = 0; i < num_cells; ++i) {
+        std::cout << "D(" << i << "): " << aux_div_output[i] << std::endl;
+    }
+
+    // Check lumped mass
+    std::cout << std::endl;
+    std::cout << "cell_domain_size: " << cell_domain_size << std::endl;
+    std::cout << "mass_factor: " << mass_factor << std::endl;
+    double sum = 0.0;
+    for (unsigned int i = 0; i < num_nodes; ++i) {
+        std::cout << "M_l(" << i << "): " << lumped_mass_vector(i,0)  << " - " << lumped_mass_vector(i,1) << std::endl;
+        sum += lumped_mass_vector(i,0);
+    }
+    std::cout << "mass sum: " << sum << std::endl;
+
+    // Check fake P
+    Operators<dim>::ApplyGradientOperator(box_divisions, cell_size, aux_ones, aux_grad_output);
+    for (unsigned int i = 0; i < num_nodes; ++i) {
+        aux_grad_output(i, 0) /= lumped_mass_vector(i, 0);
+        aux_grad_output(i, 1) /= lumped_mass_vector(i, 1);
+    }
+    std::cout << std::endl;
+    for (unsigned int i = 0; i < num_nodes; ++i) {
+        std::cout << "MinvG(" << i << "): " << aux_grad_output(i,0)  << " - " << aux_grad_output(i,1) << std::endl;
+    }
+    Operators<dim>::ApplyDivergenceOperator(box_divisions, cell_size, aux_grad_output, aux_div_output);
+    std::cout << std::endl;
+    for (unsigned int i = 0; i < num_cells; ++i) {
+        std::cout << "P(" << i << "): " << aux_div_output[i] << std::endl;
+    }
+
+    return 0;
+
+    //TODO: ... to here
 
     // Set Runge-Kutta arrays
     constexpr int rk_order = 4;

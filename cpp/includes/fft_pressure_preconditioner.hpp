@@ -91,7 +91,7 @@ public:
 
             PressureOperator<TDim> periodic_pressure_operator(mrBoxDivisions, mrCellSize, periodic_lumped_mass_vector_inv);
             periodic_pressure_operator.Apply(x, y);
-            // periodic_pressure_operator.f("pressure_matrix_without_bcs" + std::to_string(mrBoxDivisions[0]) + "_" + std::to_string(mrBoxDivisions[1]), results_path);
+            //periodic_pressure_operator.Output("pressure_matrix_without_bcs_" + std::to_string(mrBoxDivisions[0]) + "_" + std::to_string(mrBoxDivisions[1]), "../cpp_output/");
 
             // std::unique_ptr<PressureOperator<dim>> p_pressure_operator;
             // if (artificial_compressibility) {

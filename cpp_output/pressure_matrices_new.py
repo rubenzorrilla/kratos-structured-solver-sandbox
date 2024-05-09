@@ -11,8 +11,8 @@ def nonlocal_iterate(arr):
     p_iters += 1
 
 # Mesh size
-x_divisions = 8
-y_divisions = 8
+x_divisions = 3
+y_divisions = 3
 
 # Parsing pressure matrices and right hand side
 b_name = f'b_{x_divisions}_{y_divisions}_1.mm'
@@ -27,6 +27,20 @@ print(f"\nReading {pressure_matrix_name}...")
 pressure_matrix = scipy.io.mmread(pressure_matrix_name)
 pressure_matrix = pressure_matrix.tocsr()
 print(f"{pressure_matrix_name} imported.")
+
+pressure_matrix_wo_bcs_name = f'pressure_matrix_without_bcs_{x_divisions}_{y_divisions}.mm'
+print(f"\nReading {pressure_matrix_wo_bcs_name}...")
+pressure_matrix_wo_bcs = scipy.io.mmread(pressure_matrix_wo_bcs_name)
+pressure_matrix_wo_bcs = pressure_matrix_wo_bcs.tocsr()
+print(f"{pressure_matrix_wo_bcs_name} imported.")
+
+# b_name_py = f'b_{x_divisions}_{y_divisions}_1_py.mtx'
+# print(f"\nReading {b_name_py}...")
+# b_py = scipy.io.mmread(b_name_py)
+# b_py = b_py.transpose()
+# print(f"{b_name_py} imported.")
+# print(f"b_py norm: {numpy.linalg.norm(b_py)}")
+# print(f"Python vs. ccp RHS (nonzeros): {numpy.count_nonzero(b - b_py)}")
 
 # pressure_matrix_name_py = f'pressure_matrix_{8}_{8}_py.mtx'
 # print(f"\nReading {pressure_matrix_name_py}...")
@@ -46,6 +60,16 @@ print(f"{pressure_matrix_name} imported.")
 plt.matshow(pressure_matrix.toarray())
 plt.colorbar()
 plt.show()
+
+plt.matshow(pressure_matrix_wo_bcs.toarray())
+plt.colorbar()
+plt.show()
+
+ones_vect = numpy.ones(pressure_matrix.shape[0])
+print(f"\nP @ ones_vect is all zeros? {not any(pressure_matrix@ones_vect)}")
+print(f"\nP (periodic) @ ones_vect is all zeros? {not any(pressure_matrix_wo_bcs@ones_vect)}")
+print(pressure_matrix_wo_bcs)
+print(pressure_matrix_wo_bcs@ones_vect)
 
 # Compute pressure matrix eigenvalues
 solve = scipy.sparse.linalg.factorized(pressure_matrix.tocsc())
