@@ -210,8 +210,10 @@ void MeshUtilities<3>::CalculateLumpedMassVector(
 template <>
 std::tuple<bool, unsigned int> MeshUtilities<2>::FindFirstFreeCellId(
     const std::array<int, 2> &rBoxDivisions,
-    const FixityMatrixViewType& rFixity)
+    const FixityMatrixViewType& rFixity,
+    const std::vector<bool>& rActiveCells)
 {
+    std::array<int, 8> neigh_cells_ids;
     std::array<int, cell_nodes> cell_node_ids;
     for (unsigned int i = 0; i < rBoxDivisions[1]; ++i) {
         for (unsigned int j = 0; j < rBoxDivisions[0]; ++j) {
@@ -230,7 +232,28 @@ std::tuple<bool, unsigned int> MeshUtilities<2>::FindFirstFreeCellId(
 
             // Check if the number of free DOFs matches the total number of DOFs in the cell
             if (n_free_dofs == cell_dofs) {
-                return std::make_tuple(true, CellUtilities::GetCellGlobalId(i, j, rBoxDivisions));
+                // Get the neighbouring cells global ids
+                CellUtilities::GetNeighbourCellsGlobalIds(i, j, rBoxDivisions, neigh_cells_ids);
+
+                // If all DOFs in the cell are free, check that it has complete stencil
+                // That is to check that it is completely surrounded by active neighbour cells
+                bool valid_neighs = true;
+                for (int neigh_id : neigh_cells_ids) {
+                    if (neigh_id == -1) { // Note that if there is no neighbour the id is set to -1
+                        valid_neighs = false;
+                        break;
+                    } else {
+                        if (!rActiveCells[neigh_id]) { // Check if the neighbour cell is active
+                            valid_neighs = false;
+                            break;
+                        }
+                    }
+                }
+
+                // If all the neighbouring cells are available and active return the id of current cell
+                if (valid_neighs) {
+                    return std::make_tuple(true, CellUtilities::GetCellGlobalId(i, j, rBoxDivisions));
+                }
             }
         }
     }
@@ -241,8 +264,10 @@ std::tuple<bool, unsigned int> MeshUtilities<2>::FindFirstFreeCellId(
 template <>
 std::tuple<bool, unsigned int> MeshUtilities<3>::FindFirstFreeCellId(
     const std::array<int, 3> &rBoxDivisions,
-    const FixityMatrixViewType& rFixity)
+    const FixityMatrixViewType& rFixity,
+    const std::vector<bool>& rActiveCells)
 {
+    std::array<int, 24> neigh_cells_ids;
     std::array<int, cell_nodes> cell_node_ids;
     for (unsigned int i = 0; i < rBoxDivisions[1]; ++i) {
         for (unsigned int j = 0; j < rBoxDivisions[0]; ++j) {
@@ -253,7 +278,7 @@ std::tuple<bool, unsigned int> MeshUtilities<3>::FindFirstFreeCellId(
                 // Get the number of free DOFs in current cell
                 unsigned int n_free_dofs = 0;
                 for (unsigned int node_id : cell_node_ids) {
-                    for (unsigned int d = 0; d < 2; ++d) {
+                    for (unsigned int d = 0; d < 3; ++d) {
                         if (!rFixity(node_id, d)) {
                             n_free_dofs++;
                         }
@@ -262,7 +287,28 @@ std::tuple<bool, unsigned int> MeshUtilities<3>::FindFirstFreeCellId(
 
                 // Check if the number of free DOFs matches the total number of DOFs in the cell
                 if (n_free_dofs == cell_dofs) {
-                    return std::make_tuple(true, CellUtilities::GetCellGlobalId(i, j, k, rBoxDivisions));
+                    // Get the neighbouring cells global ids
+                    CellUtilities::GetNeighbourCellsGlobalIds(i, j, k, rBoxDivisions, neigh_cells_ids);
+
+                    // If all DOFs in the cell are free, check that it has complete stencil
+                    // That is to check that it is completely surrounded by active neighbour cells
+                    bool valid_neighs = true;
+                    for (int neigh_id : neigh_cells_ids) {
+                        if (neigh_id == -1) { // Note that if there is no neighbour the id is set to -1
+                            valid_neighs = false;
+                            break;
+                        } else {
+                            if (!rActiveCells[neigh_id]) { // Check if the neighbour cell is active
+                                valid_neighs = false;
+                                break;
+                            }
+                        }
+                    }
+
+                    // If all the neighbouring cells are available and active return the id of current cell
+                    if (valid_neighs) {
+                        return std::make_tuple(true, CellUtilities::GetCellGlobalId(i, j, k, rBoxDivisions));
+                    }
                 }
             }
         }

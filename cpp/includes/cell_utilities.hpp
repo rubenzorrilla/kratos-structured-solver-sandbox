@@ -25,6 +25,19 @@ public:
         return K + I * rBoxDivisions[0] + J * rBoxDivisions[1];
     }
 
+    static void GetNeighbourCellsGlobalIds(
+        const unsigned int I,
+        const unsigned int J,
+        const std::array<int, 2>& rBoxDivisions,
+        std::array<int, 8>& rCellNeighboursIds);
+
+    static void GetNeighbourCellsGlobalIds(
+        const unsigned int I,
+        const unsigned int J,
+        const unsigned int k,
+        const std::array<int, 3>& rBoxDivisions,
+        std::array<int, 24>& rCellNeighboursIds);
+
     static unsigned int GetNodeGlobalId(
         const unsigned int I,
         const unsigned int J,

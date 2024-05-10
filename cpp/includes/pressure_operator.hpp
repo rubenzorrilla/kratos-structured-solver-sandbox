@@ -22,24 +22,12 @@ public:
     PressureOperator(
         const std::array<int, TDim>& rBoxDivisions,
         const std::array<double, TDim>& rCellSize,
-        const MatrixViewType& rLumpedMassVectorInv)
-        : mrCellSize(rCellSize)
-        , mrBoxDivisions(rBoxDivisions)
-        , mrLumpedMassVectorInv(rLumpedMassVectorInv)
-    {
-        mIsInitialized = true;
-        // mArtificialCompressibility = false;
-    }
-
-    PressureOperator(
-        const std::array<int, TDim>& rBoxDivisions,
-        const std::array<double, TDim>& rCellSize,
         const std::vector<bool>& rActiveCells,
         const MatrixViewType& rLumpedMassVectorInv)
         : mrCellSize(rCellSize)
         , mrBoxDivisions(rBoxDivisions)
+        , mrActiveCells(rActiveCells)
         , mrLumpedMassVectorInv(rLumpedMassVectorInv)
-        , mpActiveCells(&rActiveCells)
     {
         mIsInitialized = true;
         // mArtificialCompressibility = false;
@@ -88,11 +76,7 @@ public:
         MatrixViewType aux(aux_data, n_nodes, TDim);
 
         // Apply gradient operator to input vector
-        if (mpActiveCells != nullptr) {
-            Operators<TDim>::ApplyGradientOperator(mrBoxDivisions, mrCellSize, *mpActiveCells, rInput, aux);
-        } else {
-            Operators<TDim>::ApplyGradientOperator(mrBoxDivisions, mrCellSize, rInput, aux);
-        }
+        Operators<TDim>::ApplyGradientOperator(mrBoxDivisions, mrCellSize, mrActiveCells, rInput, aux);
 
         // Apply the lumped mass inverse to the auxiliary vector
         for (unsigned int i = 0; i < mrLumpedMassVectorInv.extent(0); ++i) {
@@ -102,11 +86,7 @@ public:
         }
 
         // Apply the divergence operator to the auxiliary vector and store the result in the output array
-        if (mpActiveCells != nullptr) {
-            Operators<TDim>::ApplyDivergenceOperator(mrBoxDivisions, mrCellSize, *mpActiveCells, aux, rOutput);
-        } else {
-            Operators<TDim>::ApplyDivergenceOperator(mrBoxDivisions, mrCellSize, aux, rOutput);
-        }
+        Operators<TDim>::ApplyDivergenceOperator(mrBoxDivisions, mrCellSize, mrActiveCells, aux, rOutput);
 
         // // Append the artificial compressibility contribution
         // if (mArtificialCompressibility) {
@@ -229,7 +209,7 @@ public:
 
     const std::vector<bool>& GetActiveCells() const
     {
-        return *mpActiveCells;
+        return mrActiveCells;
     }
 
 private:
@@ -248,8 +228,8 @@ private:
 
     const std::array<int, TDim>& mrBoxDivisions;
 
-    const MatrixViewType& mrLumpedMassVectorInv;
+    const std::vector<bool>& mrActiveCells;
 
-    const std::vector<bool>* mpActiveCells = nullptr;
+    const MatrixViewType& mrLumpedMassVectorInv;
 
 };

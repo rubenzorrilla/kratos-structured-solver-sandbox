@@ -40,12 +40,14 @@ public:
         const std::array<int, TDim>& rBoxDivisions,
         const std::array<double, TDim>& rCellSize,
         const FixityViewType& rFixity,
-        const double MassFactor)
+        const std::vector<bool>& rActiveCells,
+        const MatrixViewType& rLumpedMassVectorInv)
         : PressurePreconditioner<TDim>()
         , mrBoxDivisions(rBoxDivisions)
         , mrCellSize(rCellSize)
         , mrFixity(rFixity)
-        , mMassFactor(MassFactor)
+        , mrActiveCells(rActiveCells)
+        , mrLumpedMassVectorInv(rLumpedMassVectorInv)
     {
     }
 
@@ -63,23 +65,13 @@ public:
     void SetUp() override
     {
         // Search for the first free cell to obtain the periodic (circulant) stencil from it
-        auto free_cell_result = MeshUtilities<TDim>::FindFirstFreeCellId(mrBoxDivisions, mrFixity);
+        auto free_cell_result = MeshUtilities<TDim>::FindFirstFreeCellId(mrBoxDivisions, mrFixity, mrActiveCells);
         if (std::get<0>(free_cell_result)) {
             // Memory allocation
             auto mesh_data = MeshUtilities<TDim>::CalculateMeshData(mrBoxDivisions);
             const SizeType num_nodes = std::get<0>(mesh_data);
             mProblemSize = std::get<1>(mesh_data);
             mFFTc.resize(mProblemSize);
-
-            // Build the periodic (i.e. no BCs) lumped mass matrix inverse
-            double periodic_lumped_mass_data_inv[num_nodes * TDim];
-            MatrixViewType periodic_lumped_mass_vector_inv(periodic_lumped_mass_data_inv, num_nodes, TDim);
-            MeshUtilities<TDim>::CalculateLumpedMassVector(mMassFactor, mrBoxDivisions, periodic_lumped_mass_vector_inv);
-            for (IndexType i_node = 0; i_node < num_nodes; ++i_node) {
-                for (IndexType d = 0; d < TDim; ++d) {
-                    periodic_lumped_mass_vector_inv(i_node, d) = 1.0 / periodic_lumped_mass_vector_inv(i_node, d);
-                }
-            }
 
             // Get the circulant row from the pressure operator application onto a vector
             // Note that we set the vector such that we get the row corresponding to the previously obtained free cell
@@ -89,7 +81,7 @@ public:
             VectorType y(mProblemSize);
             x[free_cell_id] = 1.0;
 
-            PressureOperator<TDim> periodic_pressure_operator(mrBoxDivisions, mrCellSize, periodic_lumped_mass_vector_inv);
+            PressureOperator<TDim> periodic_pressure_operator(mrBoxDivisions, mrCellSize, mrActiveCells, mrLumpedMassVectorInv);
             periodic_pressure_operator.Apply(x, y);
             //periodic_pressure_operator.Output("pressure_matrix_without_bcs_" + std::to_string(mrBoxDivisions[0]) + "_" + std::to_string(mrBoxDivisions[1]), "../cpp_output/");
 
@@ -240,7 +232,9 @@ private:
 
     const FixityViewType& mrFixity;
 
-    const double mMassFactor;
+    const std::vector<bool>& mrActiveCells;
+
+    const MatrixViewType& mrLumpedMassVectorInv;
 
     bool mIsSetUp = false;
 

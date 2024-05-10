@@ -405,7 +405,7 @@ int main()
     std::cout << "\n### PRESSURE PRECONDITIONER SET-UP ###" << std::endl;
     std::shared_ptr<PressurePreconditioner<dim>> p_pressure_preconditioner = nullptr;
     if (pres_prec_type == "fft") {
-        std::shared_ptr<PressurePreconditioner<dim>> p_aux = std::make_unique<FftPressurePreconditioner<dim>>(box_divisions, cell_size, fixity, mass_factor);
+        std::shared_ptr<PressurePreconditioner<dim>> p_aux = std::make_unique<FftPressurePreconditioner<dim>>(box_divisions, cell_size, fixity, active_cells, lumped_mass_vector_inv);
         std::swap(p_aux, p_pressure_preconditioner);
     } else {
         std::shared_ptr<PressurePreconditioner<dim>> p_aux = std::make_unique<PressurePreconditioner<dim>>();
@@ -617,10 +617,13 @@ int main()
                 v_n(i, d) = v(i, d);
             }
         }
+
+        if (current_step == 1) {
+            break;
+        }
+
         ++current_step;
         current_time += dt;
-
-        return 0;
     }
 
     // Clear memory
