@@ -1,4 +1,5 @@
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 
 #include "cell_utilities.hpp"
@@ -286,6 +287,7 @@ void MeshUtilities<TDim>::OutputVector(
 
     std::ofstream out_file(OutputPath + Filename + ".mm");
     if (out_file.is_open()) {
+        out_file <<  std::scientific << std::setprecision(12);
         out_file << "%%MatrixMarket matrix coordinate real general" << std::endl;
         out_file << rVector.size() << "  " << 1 << "  " << non_zero_entries.size() << std::endl;
         for (auto& r_non_zero_entry : non_zero_entries) {
