@@ -115,10 +115,8 @@ public:
             y_complex = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * mProblemSize);
 
             // Create the FFTW fransform plans
-            fftw_plan p_x;
-            fftw_plan p_y;
-            p_x = fftw_plan_dft(TDim, mrBoxDivisions.data(), x_complex, fft_x, FFTW_FORWARD, FFTW_ESTIMATE); //TODO: We should use the FFT for real numbers in here
-            p_y = fftw_plan_dft(TDim, mrBoxDivisions.data(), y_complex, fft_y, FFTW_FORWARD, FFTW_ESTIMATE); //TODO: We should use the FFT for real numbers in here
+            fftw_plan p_x = fftw_plan_dft(TDim, mrBoxDivisions.data(), x_complex, fft_x, FFTW_FORWARD, FFTW_ESTIMATE); //TODO: We should use the FFT for real numbers in here
+            fftw_plan p_y = fftw_plan_dft(TDim, mrBoxDivisions.data(), y_complex, fft_y, FFTW_FORWARD, FFTW_ESTIMATE); //TODO: We should use the FFT for real numbers in here
 
             // Set FFTs input data
             // Note that FFTW advises to do this after setting the plans as some of the flags may overwrite this
@@ -164,8 +162,8 @@ public:
             mComplexAux = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * mProblemSize);
 
             // Establish the FFTW transform plans for the preconditioner application
-            mPlanForward = fftw_plan_dft(TDim, mrBoxDivisions.data(), mComplexb, mFFTb, FFTW_FORWARD, FFTW_MEASURE);
-            mPlanBackward = fftw_plan_dft(TDim, mrBoxDivisions.data(), mComplexAux, mIFFTAux, FFTW_BACKWARD, FFTW_MEASURE);
+            mpPlanForward = std::make_unique<fftw_plan>(fftw_plan_dft(TDim, mrBoxDivisions.data(), mComplexb, mFFTb, FFTW_FORWARD, FFTW_MEASURE));
+            mpPlanBackward = std::make_unique<fftw_plan>(fftw_plan_dft(TDim, mrBoxDivisions.data(), mComplexAux, mIFFTAux, FFTW_BACKWARD, FFTW_MEASURE));
 
             // Set the initialization flag
             mIsSetUp = true;
@@ -187,7 +185,7 @@ public:
             }
 
             // Execute the forward FFT
-            fftw_execute(mPlanForward);
+            fftw_execute(*mpPlanForward);
 
             // Set the backward FFT input
             for (unsigned int i = 0; i < mProblemSize; ++i) {
@@ -199,7 +197,7 @@ public:
             }
 
             // Execute the backward FFT
-            fftw_execute(mPlanBackward);
+            fftw_execute(*mpPlanBackward);
 
             // Set the output as the normalized IFFT
             // Note from FFTW documentation "FFTW computes an unnormalized DFT.Thus, computing a forward
@@ -225,8 +223,13 @@ public:
         fftw_free(mIFFTAux);
         fftw_free(mComplexAux);
 
-        fftw_destroy_plan(mPlanForward);
-        fftw_destroy_plan(mPlanBackward);
+        fftw_destroy_plan(*mpPlanForward);
+        fftw_destroy_plan(*mpPlanBackward);
+
+        fftw_cleanup();
+
+        mpPlanForward = nullptr;
+        mpPlanBackward = nullptr;
     }
 
 private:
@@ -253,9 +256,9 @@ private:
 
     fftw_complex *mComplexAux;
 
-    fftw_plan mPlanForward;
+    std::unique_ptr<fftw_plan> mpPlanForward = nullptr;
 
-    fftw_plan mPlanBackward;
+    std::unique_ptr<fftw_plan> mpPlanBackward = nullptr;
 
 };
 
