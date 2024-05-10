@@ -1,5 +1,6 @@
 #include <array>
 #include <fstream>
+#include <iomanip>
 
 #include "cell_utilities.hpp"
 #include "mesh_utilities.hpp"
@@ -117,40 +118,46 @@ public:
         //     }
         // }
 
-        // const double tau = 1.0e-3;
-        // for (unsigned int i = 0; i < mrBoxDivisions[1]; ++i) {
-        //     for (unsigned int j = 0; j < mrBoxDivisions[0]; ++j) {
-        //         double temp = 0.0;
-        //         unsigned int cell_id = CellUtilities::GetCellGlobalId(i, j, mrBoxDivisions);
-        //         if (mrActiveCells[cell_id]) {
-        //             if (i > 0) {
-        //                 unsigned int neigh_cell_id = CellUtilities::GetCellGlobalId(i - 1, j, mrBoxDivisions);
-        //                 if (mrActiveCells[cell_id]) {
-        //                     temp += mrCellSize[0] * (rInput[cell_id] - rInput[neigh_cell_id]);
+        // // if (mpActiveCells != nullptr) {
+        //     const double tau = 1.0e-1;
+        //     for (unsigned int i = 0; i < mrBoxDivisions[1]; ++i) {
+        //         for (unsigned int j = 0; j < mrBoxDivisions[0]; ++j) {
+        //             double temp = 0.0;
+        //             unsigned int cell_id = CellUtilities::GetCellGlobalId(i, j, mrBoxDivisions);
+        //             // if (GetActiveCells()[cell_id]) {
+        //                 // Bottom cell
+        //                 if (i > 0) {
+        //                     unsigned int neigh_cell_id = CellUtilities::GetCellGlobalId(i - 1, j, mrBoxDivisions);
+        //                     // if (GetActiveCells()[cell_id]) {
+        //                         temp += mrCellSize[0] * (rInput[cell_id] - rInput[neigh_cell_id]);
+        //                     // }
         //                 }
-        //             }
-        //             if (i < mrBoxDivisions[0] - 1) {
-        //                 unsigned int neigh_cell_id = CellUtilities::GetCellGlobalId(i + 1, j, mrBoxDivisions);
-        //                 if (mrActiveCells[cell_id]) {
-        //                     temp += mrCellSize[0] * (rInput[cell_id] - rInput[neigh_cell_id]);
+        //                 // Top cell
+        //                 if (i < mrBoxDivisions[1] - 1) {
+        //                     unsigned int neigh_cell_id = CellUtilities::GetCellGlobalId(i + 1, j, mrBoxDivisions);
+        //                     // if (GetActiveCells()[cell_id]) {
+        //                         temp += mrCellSize[0] * (rInput[cell_id] - rInput[neigh_cell_id]);
+        //                     // }
         //                 }
-        //             }
-        //             if (j > 0) {
-        //                 unsigned int neigh_cell_id = CellUtilities::GetCellGlobalId(i, j - 1, mrBoxDivisions);
-        //                 if (mrActiveCells[cell_id]) {
-        //                     temp += mrCellSize[1] * (rInput[cell_id] - rInput[neigh_cell_id]);
+        //                 // Left cell
+        //                 if (j > 0) {
+        //                     unsigned int neigh_cell_id = CellUtilities::GetCellGlobalId(i, j - 1, mrBoxDivisions);
+        //                     // if (GetActiveCells()[cell_id]) {
+        //                         temp += mrCellSize[1] * (rInput[cell_id] - rInput[neigh_cell_id]);
+        //                     // }
         //                 }
-        //             }
-        //             if (i < mrBoxDivisions[1] - 1) {
-        //                 unsigned int neigh_cell_id = CellUtilities::GetCellGlobalId(i, j + 1, mrBoxDivisions);
-        //                 if (mrActiveCells[cell_id]) {
-        //                     temp += mrCellSize[1] * (rInput[cell_id] - rInput[neigh_cell_id]);
+        //                 // Right cell
+        //                 if (j < mrBoxDivisions[0] - 1) {
+        //                     unsigned int neigh_cell_id = CellUtilities::GetCellGlobalId(i, j + 1, mrBoxDivisions);
+        //                     // if (GetActiveCells()[cell_id]) {
+        //                         temp += mrCellSize[1] * (rInput[cell_id] - rInput[neigh_cell_id]);
+        //                     // }
         //                 }
-        //             }
-        //             rOutput[cell_id] -= tau * temp;
+        //                 rOutput[cell_id] += tau * temp;
+        //             // }
         //         }
         //     }
-        // }
+        // // }
     }
 
     void Output(
@@ -192,6 +199,7 @@ public:
         // Output the non-zero entries in (plain) matrix market format
         std::ofstream out_file(OutputPath + Filename + ".mm");
         if (out_file.is_open()) {
+            out_file <<  std::scientific << std::setprecision(12);
             out_file << "%%MatrixMarket matrix coordinate real general" << std::endl;
             out_file << n_cells << "  " << n_cells << "  " << non_zero_entries.size() << std::endl;
             for (auto& r_non_zero_entry : non_zero_entries) {
