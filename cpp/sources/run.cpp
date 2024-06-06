@@ -11,6 +11,7 @@
 #include "include/experimental/mdspan"
 
 #include "cell_utilities.hpp"
+#include "deflation_pressure_preconditioner.hpp"
 #include "fft_pressure_preconditioner.hpp"
 #include "incompressible_navier_stokes_q1_p0_structured_element.hpp"
 #include "mdspan_utilities.hpp"

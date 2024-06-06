@@ -77,4 +77,17 @@ public:
     {
         return rCellSize[0]*rCellSize[1]*rCellSize[2];
     }
+
+    static void GetCellMidpointCoordinates(
+        const unsigned int I,
+        const unsigned int J,
+        const std::array<double, 2>& rCellSize,
+        std::array<double, 2>& rCellMidpointCoordinates);
+
+    static void GetCellMidpointCoordinates(
+        const unsigned int I,
+        const unsigned int J,
+        const unsigned int K,
+        const std::array<double, 3>& rCellSize,
+        std::array<double, 3>& rCellMidpointCoordinates);
 };

@@ -56,3 +56,25 @@ void CellUtilities::GetCellNodesGlobalIds(
     rCellIds[6] = GetNodeGlobalId(I + 1, J + 1, K + 1, rBoxDivisions);
     rCellIds[7] = GetNodeGlobalId(I + 1, J, K + 1, rBoxDivisions);
 }
+
+void CellUtilities::GetCellMidpointCoordinates(
+    const unsigned int I,
+    const unsigned int J,
+    const std::array<double, 2>& rCellSize,
+    std::array<double, 2>& rCellMidpointCoordinates)
+{
+    rCellMidpointCoordinates[0] = (J + 0.5) * rCellSize[0];
+    rCellMidpointCoordinates[1] = (I + 0.5) * rCellSize[1];
+}
+
+void CellUtilities::GetCellMidpointCoordinates(
+    const unsigned int I,
+    const unsigned int J,
+    const unsigned int K,
+    const std::array<double, 3>& rCellSize,
+    std::array<double, 3>& rCellMidpointCoordinates)
+{
+    rCellMidpointCoordinates[0] = (J + 0.5) * rCellSize[0];
+    rCellMidpointCoordinates[1] = (I + 0.5) * rCellSize[1];
+    rCellMidpointCoordinates[2] = (K + 0.5) * rCellSize[2];
+}
