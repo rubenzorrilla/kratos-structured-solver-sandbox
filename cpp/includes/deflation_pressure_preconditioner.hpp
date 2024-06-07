@@ -63,8 +63,9 @@ public:
         // Memory allocation
         auto mesh_data = MeshUtilities<TDim>::CalculateMeshData(mrBoxDivisions);
         mProblemSize = std::get<1>(mesh_data);
-        mRigidModesData.resize(mProblemSize * (TDim + 1));
-        mRigidModes = MatrixViewType(mRigidModesData.data(), mProblemSize, TDim + 1);
+        for (unsigned int i = 0; i < TDim + 1; ++i) {
+            mRigidModes[i].resize(mProblemSize);
+        }
 
         // Set the rigid modes array (Z) from the cell midpoint coordinates
         std::array<double, TDim> cell_coords;
@@ -73,9 +74,9 @@ public:
                 for (unsigned int j = 0; j < mrBoxDivisions[0]; ++j) {
                     const unsigned int cell_id = CellUtilities::GetCellGlobalId(i, j, mrBoxDivisions);
                     CellUtilities::GetCellMidpointCoordinates(i, j, mrCellSize, cell_coords);
-                    mRigidModes(cell_id, 0) = 1.0;
-                    mRigidModes(cell_id, 1) = cell_coords[0];
-                    mRigidModes(cell_id, 2) = cell_coords[1];
+                    mRigidModes[0][cell_id] = 1.0;
+                    mRigidModes[1][cell_id] = cell_coords[0];
+                    mRigidModes[2][cell_id] = cell_coords[1];
                 }
             }
         } else {
@@ -83,7 +84,13 @@ public:
         }
 
         // Compute the E matrix (trans(Z)*P*Z) by applying the provided pressure operator
-        VectorType aux_col(mProblemSize);
+        VectorType aux_in(mProblemSize);
+        VectorType aux_out(mProblemSize);
+        for (unsigned int j = 0; j < TDim + 1; ++j) {
+            for (unsigned int i = 0; i < mProblemSize; ++i) {
+                aux_in(i) = mRigidModes
+            }
+        }
 
 
         // Set the initialization flag
@@ -173,9 +180,7 @@ private:
 
     SizeType mProblemSize;
 
-    MatrixViewType mRigidModes;
-
-    std::vector<double> mRigidModesData;
+    std::array<std::vector<double>, TDim + 1> mRigidModes;
 
     std::array<std::array<double, TDim>, TDim> mE;
 

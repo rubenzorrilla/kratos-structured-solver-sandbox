@@ -45,6 +45,7 @@ def GetButcherTableau():
 # Problem data
 end_time = 1.0e0
 init_time = 0.0
+deflation = True
 
 # Material data
 # mu = 1.81e-5
@@ -54,7 +55,7 @@ rho = 1.0e0
 
 # Mesh data
 box_size = [1.0,1.0,None]
-box_divisions = [10,10,None]
+box_divisions = [300,300,None]
 # box_divisions = [150,30,None]
 cell_size = [i/j if i is not None else 0.0 for i, j in zip(box_size, box_divisions)]
 if box_size[2] == None:
@@ -491,7 +492,78 @@ def prod(x):
     y = ApplyPressureOperator(x, lumped_mass_vector_inv_bcs)
     return y.flat
 
-pressure_op = scipy.sparse.linalg.LinearOperator((num_cells,num_cells), matvec=prod)
+# Set deflation
+if deflation:
+
+    if dim == 2:
+        # Coarsening deflation
+        box_divisions_coarse = [30,30,None]
+        cell_size_coarse = [i/j if i is not None else 0.0 for i, j in zip(box_size, box_divisions_coarse)]
+        Z = np.zeros((num_cells, box_divisions_coarse[0]*box_divisions_coarse[1]))
+        for i_coarse in range(box_divisions_coarse[1]):
+            for j_coarse in range(box_divisions_coarse[0]):
+                # Get current coarse cell bounds
+                coarse_min_x = j_coarse * cell_size_coarse[0]
+                coarse_max_x = (j_coarse + 1) * cell_size_coarse[0]
+                coarse_min_y = i_coarse * cell_size_coarse[1]
+                coarse_max_y = (i_coarse + 1) * cell_size_coarse[1]
+
+                # Check if fine cells lie into current coarse cell
+                for i in range(box_divisions[1]):
+                    for j in range(box_divisions[0]):
+                        # Get current fine cell centroid
+                        fine_x = (j + 0.5) * cell_size[0]
+                        fine_y = (i + 0.5) * cell_size[1]
+
+                        # Check that the current cell centroid is inside the coarse cell bounds
+                        if (coarse_min_x < fine_x and fine_x < coarse_max_x):
+                            if (coarse_min_y < fine_y and fine_y < coarse_max_y):
+                                # Get fine and coarse cell ids
+                                fine_id = GetCellGlobalId(i, j, None)
+                                coarse_id = int(j_coarse + i_coarse * box_divisions_coarse[0])
+                                # Add current fine cell to the coarsening matrix
+                                Z[fine_id, coarse_id] = 1.0
+
+        # # Coordinates deflation
+        # Z = np.zeros((num_cells, dim + 1))
+        # for i in range(box_divisions[1]):
+        #     for j in range(box_divisions[0]):
+        #         Z[GetCellGlobalId(i, j, None), 0] = 1.0
+        #         Z[GetCellGlobalId(i, j, None), 1] = (j + 0.5) * cell_size[0]
+        #         Z[GetCellGlobalId(i, j, None), 2] = (i + 0.5) * cell_size[1]
+    else:
+        raise Exception("Deflation preconditioner is not implemented in 3D yet.")
+
+    aux = np.zeros(Z.shape)
+    for i in range(Z.shape[1]):
+        aux[:,i] = prod(Z[:,i]) #Note that this function applies the pressure operator onto a vector
+    E = Z.transpose() @ aux
+    invE = scipy.linalg.inv(E)
+    invEtransZ = invE @ Z.transpose()
+
+def apply_deflation(r):
+    aux = invEtransZ @ r
+    aux = Z @ aux
+    aux = prod(aux)
+    aux = r - aux
+    return aux
+
+def deflated_prod(x):
+    y = ApplyPressureOperator(x, lumped_mass_vector_inv_bcs)
+    y = apply_deflation(y)
+    return y.flat
+
+def postprocess_deflation(y, b):
+    aux = b - prod(y)
+    aux = Z.transpose() @ aux
+    lamb = invE @ aux
+    x = y + Z @ lamb
+    return x.flat
+
+if deflation:
+    pressure_op = scipy.sparse.linalg.LinearOperator((num_cells,num_cells), matvec=deflated_prod)
+else:
+    pressure_op = scipy.sparse.linalg.LinearOperator((num_cells,num_cells), matvec=prod)
 
 # # Extract pressure matrix
 # pressure_matrix = np.zeros(shape=(num_cells, num_cells))
@@ -585,7 +657,8 @@ while current_time < end_time:
     def nonlocal_iterate(arr):
         global p_iters
         p_iters += 1
-    delta_p, converged = scipy.sparse.linalg.cg(pressure_op, delta_p_rhs, tol=1.0e-7, callback=nonlocal_iterate, M=precond)
+    delta_p, converged = scipy.sparse.linalg.cg(pressure_op, apply_deflation(delta_p_rhs) if deflation else delta_p_rhs, tol=1.0e-7, callback=nonlocal_iterate, M=precond)
+    delta_p = postprocess_deflation(delta_p, delta_p_rhs) if deflation else delta_p
     p += delta_p
     tot_p_iters += p_iters
     print(f"Pressure iterations: {p_iters}.")
@@ -642,6 +715,8 @@ while current_time < end_time:
     v_n = v.copy()
     current_step += 1
     current_time += dt
+
+    break
 
 # Finalize results
 gid_output.ExecuteFinalize()
