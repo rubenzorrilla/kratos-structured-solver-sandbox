@@ -88,7 +88,7 @@ public:
         VectorType aux_out(mProblemSize);
         for (unsigned int j = 0; j < TDim + 1; ++j) {
             for (unsigned int i = 0; i < mProblemSize; ++i) {
-                aux_in(i) = mRigidModes
+                aux_in(i) = mRigidModes;
             }
         }
 
@@ -144,7 +144,7 @@ public:
 
         mProblemSize = 0;
 
-        mRigidModesData.clear();
+        mRigidModes.clear();
 
         // mFFTc.clear();
 
