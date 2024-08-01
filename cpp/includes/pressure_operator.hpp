@@ -72,7 +72,7 @@ public:
         // Allocate auxiliary array
         //TODO: This must be done once
         const unsigned int n_nodes = std::get<0>(MeshUtilities<TDim>::CalculateMeshData(mrBoxDivisions));
-        double aux_data[n_nodes * TDim];
+        double * aux_data = (double *)malloc(sizeof(double) * n_nodes * TDim);
         MatrixViewType aux(aux_data, n_nodes, TDim);
 
         // Apply gradient operator to input vector
@@ -138,6 +138,8 @@ public:
         //         }
         //     }
         // // }
+
+        free(aux_data);
     }
 
     void Output(

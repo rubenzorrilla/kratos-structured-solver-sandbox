@@ -51,7 +51,7 @@ int main()
     //     std::cout << "sound_velocity: " << sound_velocity << std::endl;
     // }
 
-    std::string pres_prec_type = "fft"; //options: "identity" and "fft"
+    std::string pres_prec_type = "identity"; //options: "identity" and "fft"
     const double pres_abs_tol = 1.0e-7;
     const double pres_rel_tol = 1.0e-7;
     const double pres_max_iter = 5000;
@@ -65,7 +65,7 @@ int main()
 
     // Input mesh data
     const std::array<double, dim> box_size({1.0, 1.0});
-    const std::array<int, dim> box_divisions({3, 3});
+    const std::array<int, dim> box_divisions({500, 500});
 
     // Compute mesh data
     auto mesh_data = MeshUtilities<dim>::CalculateMeshData(box_divisions);
@@ -351,13 +351,13 @@ int main()
     // Hence, no velocity fixity must be considered in here (we do it directly in the inverse below)
     const double cell_domain_size = CellUtilities::GetCellDomainSize(cell_size);
     const double mass_factor = rho * cell_domain_size / (dim == 2 ? 4.0 : 8.0);
-    double lumped_mass_data[num_nodes * dim];
+    double * lumped_mass_data = (double *)malloc(sizeof(double) * num_nodes * dim);
     MatrixViewType lumped_mass_vector(lumped_mass_data, num_nodes, dim);
     MeshUtilities<dim>::CalculateLumpedMassVector(mass_factor, box_divisions, active_cells, lumped_mass_vector);
 
     // Calculate inverse of the lumped mass vector
     // Note that this already considers the velocity fixity
-    double lumped_mass_inv_data[num_nodes * dim];
+    double * lumped_mass_inv_data = (double *)malloc(sizeof(double) * num_nodes * dim);
     MatrixViewType lumped_mass_vector_inv(lumped_mass_inv_data, num_nodes, dim);
     for (unsigned int i_node = 0; i_node < num_nodes; ++i_node) {
         for (unsigned int d = 0; d < dim; ++d) {
@@ -381,9 +381,9 @@ int main()
 
     // Allocate auxiliary arrays for the velocity problem
     constexpr int rk_num_steps = rk_order;
-    double rk_v_data[num_nodes * dim];
+    double * rk_v_data   = (double *)malloc(sizeof(double)                * num_nodes * dim);
+    double * rk_res_data = (double *)malloc(sizeof(double) * rk_num_steps * num_nodes * dim);
     MatrixViewType rk_v(rk_v_data, num_nodes, dim);
-    double rk_res_data[rk_num_steps * num_nodes * dim];
     std::experimental::mdspan<double, std::experimental::extents<std::size_t, rk_num_steps, std::dynamic_extent, dim>> rk_res(rk_res_data, rk_num_steps, num_nodes, dim);
 
     // Allocate auxiliary arrays for the pressure problem
@@ -629,6 +629,12 @@ int main()
 
     // Clear memory
     p_pressure_preconditioner->Clear();
+
+    // Free Allocated Containers
+    free(lumped_mass_data);
+    free(lumped_mass_inv_data);
+    free(rk_v_data);
+    free(rk_res_data);
 
     // Print final data
     std::cout << "TOTAL PRESSURE ITERATIONS: " << tot_p_iters << std::endl;
