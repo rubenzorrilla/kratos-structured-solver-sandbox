@@ -33,10 +33,16 @@ include_directories("includes") # Header files directories
 # include_directories("external_libraries/eigen-3.4.0") # Include Eigen directories
 include_directories("external_libraries/mdspan-mdspan-0.6.0") # Include mdspan directories
 
+# FFTW3
 find_package(PkgConfig REQUIRED)
 pkg_search_module(FFTW REQUIRED fftw3 IMPORTED_TARGET)
 include_directories(PkgConfig::FFTW)
 
+# Intel Sycl
+find_package(IntelSYCL REQUIRED)
+include_directories(${SYCL_INCLUDE_DIR})
+
+# Source files directories
 file (GLOB_RECURSE KRATOS_STRUCTURED_SOLVER_SANDBOX_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/sources/cell_utilities.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/sources/incompressible_navier_stokes_q1_p0_structured_element.cpp
@@ -45,14 +51,12 @@ file (GLOB_RECURSE KRATOS_STRUCTURED_SOLVER_SANDBOX_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/sources/runge_kutta_utilities.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/sources/sbm_utilities.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/sources/time_utilities.cpp
-) # Source files directories
+)
 
 add_library(KratosStructuredSolverSandboxLibrary SHARED ${KRATOS_STRUCTURED_SOLVER_SANDBOX_SOURCES}) # This creates the library (we need to specify all the sources)
-
 add_executable(KratosStructuredSolverSandboxExecutable "${CMAKE_CURRENT_SOURCE_DIR}/sources/run.cpp") # This creates the executable
 
 target_link_libraries(KratosStructuredSolverSandboxExecutable PUBLIC KratosStructuredSolverSandboxLibrary PkgConfig::FFTW) # This links the static/shared library above with the previous executable
 
 install(TARGETS KratosStructuredSolverSandboxLibrary DESTINATION libs) # This installs the target (library) in the libs folder
-
 install(TARGETS KratosStructuredSolverSandboxExecutable DESTINATION bin) # This installs the target (executable) in the bin folder

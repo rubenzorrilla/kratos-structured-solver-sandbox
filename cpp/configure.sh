@@ -4,8 +4,9 @@
 source /home/roigcarlo/intel/oneapi/2024.0/oneapi-vars.sh intel64
 
 # Set compiler
-export CC=/usr/bin/clang
-export CXX=/usr/bin/clang++
+# export CC=/usr/bin/clang
+# export CXX=/usr/bin/clang++
+export CXX=icpx
 
 # Set variables
 export SOURCE_DIR="/home/roigcarlo/kratos-structured-solver-sandbox/cpp"
