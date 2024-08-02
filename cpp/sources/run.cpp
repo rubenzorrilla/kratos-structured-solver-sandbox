@@ -1,4 +1,5 @@
 #include <array>
+#include <vector>
 #include <string>
 #include <sstream>
 #include <numeric>
@@ -10,18 +11,35 @@
 // #include <unsupported/Eigen/FFT>
 #include "include/experimental/mdspan"
 
-#include "cell_utilities.hpp"
-#include "deflation_pressure_preconditioner.hpp"
-#include "fft_pressure_preconditioner.hpp"
-#include "incompressible_navier_stokes_q1_p0_structured_element.hpp"
-#include "mdspan_utilities.hpp"
-#include "mesh_utilities.hpp"
 #include "operators.hpp"
-#include "pressure_conjugate_gradient_solver.hpp"
-#include "pressure_preconditioner.hpp"
-#include "runge_kutta_utilities.hpp"
 #include "sbm_utilities.hpp"
+#include "cell_utilities.hpp"
+#include "mesh_utilities.hpp"
 #include "time_utilities.hpp"
+#include "mdspan_utilities.hpp"
+#include "runge_kutta_utilities.hpp"
+#include "pressure_preconditioner.hpp"
+#include "fft_pressure_preconditioner.hpp"
+#include "deflation_pressure_preconditioner.hpp"
+#include "pressure_conjugate_gradient_solver.hpp"
+#include "incompressible_navier_stokes_q1_p0_structured_element.hpp"
+
+void purgeOutput(const bool purge_output, const std::string& results_path) {
+    if (purge_output) {
+        // Remove txt and lst files
+        for (const auto& entry : std::filesystem::directory_iterator(results_path)) {
+            if (entry.path().extension() == ".txt") {
+                std::filesystem::remove(entry.path());
+            } else if (entry.path().extension() == ".lst") {
+                std::filesystem::remove(entry.path());
+            }
+        }
+
+        // Remove complete directories
+        std::filesystem::remove_all(results_path + "gid_output/");
+        std::filesystem::remove_all(results_path + "vtu_output/");
+    }
+}
 
 int main()
 {
@@ -33,10 +51,20 @@ int main()
     //TODO: Find a better way to define these
     using MatrixViewType = Operators<dim>::MatrixViewType;
 
-    // Problem data
+    ////////////////////////////////////////////////////////
+    // Problem data                                       //
+    ////////////////////////////////////////////////////////
+
+    // Tolerance
+    const double tol = 1.0e-6;
+
     // const double end_time = 4.5e1;
     const double end_time = 1.0;
     const double init_time = 0.0;
+
+    const double pres_abs_tol = 1.0e-7;
+    const double pres_rel_tol = 1.0e-7;
+    const double pres_max_iter = 5000;
 
     // Material data
     const double mu = 2.0e-3;
@@ -44,6 +72,15 @@ int main()
     // const double sound_velocity = 1.0e3;
     // const bool artificial_compressibility = false;
 
+    ////////////////////////////////////////////////////////
+    // Configuration                                      //
+    ////////////////////////////////////////////////////////
+    const bool purge_output = true;
+    const bool output_pressure_arrays = false;
+
+    ////////////////////////////////////////////////////////
+    // Main                                               //
+    ////////////////////////////////////////////////////////
     std::cout << "### PROBLEM DATA ###" << std::endl;
     std::cout << "mu: " << mu << std::endl;
     std::cout << "rho: " << rho << std::endl;
@@ -52,11 +89,10 @@ int main()
     // }
 
     std::string pres_prec_type = "identity"; //options: "identity" and "fft"
-    const double pres_abs_tol = 1.0e-7;
-    const double pres_rel_tol = 1.0e-7;
-    const double pres_max_iter = 5000;
-    const bool output_pressure_arrays = false;
-    std::cout << "\n### PRESSURE LINEAR SOLVER DATA ###" << std::endl;
+
+    std::cout << std::endl;
+
+    std::cout << "### PRESSURE LINEAR SOLVER DATA ###" << std::endl;
     std::cout << "prec_type: " << pres_prec_type << std::endl;
     std::cout << "abs_tol: " << pres_abs_tol << std::endl;
     std::cout << "rel_tol: " << pres_rel_tol << std::endl;
@@ -68,10 +104,10 @@ int main()
     const std::array<int, dim> box_divisions({500, 500});
 
     // Compute mesh data
-    auto mesh_data = MeshUtilities<dim>::CalculateMeshData(box_divisions);
+    // auto mesh_data = MeshUtilities<dim>::CalculateMeshData(box_divisions);
     auto cell_size = MeshUtilities<dim>::CalculateCellSize(box_size, box_divisions);
-    const int num_nodes = std::get<0>(mesh_data);
-    const int num_cells = std::get<1>(mesh_data);
+    auto [num_nodes, num_cells] = MeshUtilities<dim>::CalculateMeshData(box_divisions);
+    // const int num_cells = std::get<1>(mesh_data);
 
     std::cout << "\n### MESH DATA ###" << std::endl;
     std::cout << "num_nodes: " << num_nodes << std::endl;
@@ -104,20 +140,7 @@ int main()
     std::cout << "Writing interval: " << output_interval << std::endl;
 
     // Purge previous output
-    const bool purge_output = true;
-    if (purge_output) {
-        // Remove txt and lst files
-        for (const auto& entry : std::filesystem::directory_iterator(results_path)) {
-            if (entry.path().extension() == ".txt") {
-                std::filesystem::remove(entry.path());
-            } else if (entry.path().extension() == ".lst") {
-                std::filesystem::remove(entry.path());
-            }
-        }
-        // Remove complete directories
-        std::filesystem::remove_all(results_path + "gid_output/");
-        std::filesystem::remove_all(results_path + "vtu_output/");
-    }
+    purgeOutput(purge_output, results_path);
 
     // Create mesh nodes (only used for fixity and visualization)
     std::vector<double> nodal_coords_data(num_nodes * dim);
@@ -179,7 +202,6 @@ int main()
     std::experimental::mdspan<bool, std::experimental::extents<std::size_t, std::dynamic_extent, dim>> fixity(fixity_data, num_nodes, dim);
     MdspanUtilities::SetZero(fixity);
 
-    const double tol = 1.0e-6;
     for (unsigned int i_node = 0; i_node < num_nodes; ++i_node) {
         // Inlet
         if (nodal_coords(i_node, 0) < tol) {
