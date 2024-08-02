@@ -1,6 +1,9 @@
 #include <fstream>
 #include <iostream>
 
+// Intel sycl
+#include <CL/sycl.hpp>
+
 #include "cell_utilities.hpp"
 #include "mesh_utilities.hpp"
 #include "incompressible_navier_stokes_q1_p0_structured_element.hpp"
@@ -137,6 +140,51 @@ void Operators<2>::ApplyDivergenceOperator(
             }
         }
     }
+
+    // // GPU implementation of the gradient operator
+    // {
+    //     // Probably this needs to be done outside of this function
+    //     // Print sycl queue info
+    //     // getSyclInfo();
+
+    //     const int N = rBoxDivisions[0];
+    //     const int M = rBoxDivisions[1];
+
+    //     cl::sycl::queue queue(cl::sycl::gpu_selector_v);
+
+    //     // std::cout << "Mapping aux to GPU: " << M << " " << N << std::endl;
+
+    //     // Define the buffers
+    //     auto output_gpu_buff = sycl::buffer{rOutput.data(), cl::sycl::range<1>{rOutput.size()}};
+
+    //     queue.submit([&](cl::sycl::handler & cgh) {
+    //         // Get the accessors from Host buffers to Device buffers
+    //         cl::sycl::accessor output_gpu_acc{output_gpu_buff, cgh, sycl::read_write};
+
+    //         // Parallel kernel
+    //         cgh.parallel_for<class GPU_Vanilla>(cl::sycl::range<2>(N,M), [=](cl::sycl::item<2> item) {
+    //             auto i = item.get_id(0);
+    //             auto j = item.get_id(1);
+
+    //             const unsigned int cell_id = CellUtilities::GetCellGlobalId(i, j, rBoxDivisions);
+
+    //             if (rActiveCells[cell_id]) {
+    //             CellUtilities::GetCellNodesGlobalIds(i, j, rBoxDivisions, cell_node_ids);
+    //             for (unsigned int  d = 0; d < 2; ++d) {
+    //                 for (unsigned int i_node = 0; i_node < 4; ++i_node) {
+    //                     output_gpu_acc[cell_id] += cell_gradient_operator(i_node, d) * rX(cell_node_ids[i_node], d);
+    //                 }
+    //             }
+    //         }
+    //         });
+    //     });
+
+    //     queue.wait_and_throw();
+
+    //     // Get the accessors from Device buffers to Host buffers
+    //     // cl::sycl::host_accessor aux_cpu_acc(aux_gpu_buff);
+    // }
+
 }
 
 template<>
