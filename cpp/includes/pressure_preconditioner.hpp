@@ -19,13 +19,9 @@ public:
     {
     }
 
-    virtual void Apply(
-        const VectorType& rInput,
-        VectorType& rOutput)
+    virtual void Apply(const std::vector<double>& rInput, std::vector<double>& rOutput)
     {
-        for (IndexType i = 0; i < rInput.size(); ++i) {
-            rOutput[i] = rInput[i];
-        }
+        std::copy(rInput.begin(), rInput.end(), rOutput.begin());  
     }
 
     virtual void Clear()
