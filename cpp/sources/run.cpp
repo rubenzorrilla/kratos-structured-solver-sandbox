@@ -1,12 +1,15 @@
 #include <array>
+#include <chrono>
 #include <vector>
 #include <string>
 #include <sstream>
 #include <numeric>
 #include <iostream>
+#include <iterator>
 #include <unistd.h>
-#include <sys/stat.h>
 #include <filesystem>
+
+#include <sys/stat.h>
 #include <fftw3.h>
 // #include <unsupported/Eigen/FFT>
 #include "include/experimental/mdspan"
@@ -24,6 +27,26 @@
 #include "pressure_conjugate_gradient_solver.hpp"
 #include "incompressible_navier_stokes_q1_p0_structured_element.hpp"
 
+#include "utilities/perf.h"
+
+void prepareOutput(const std::string & results_path, const unsigned int & output_interval) {
+    struct stat buffer;
+
+    if (!(stat(results_path.c_str(), &buffer) == 0 && S_ISDIR(buffer.st_mode))) {
+        const int result = mkdir(results_path.c_str(), 0777); // 0777 means full access to everyone
+        if (result == 0) {
+            std::cout << "Results directory created successfully." << std::endl;
+        } else {
+            std::cerr << "Failed to create results directory." << std::endl;
+        }
+    } else {
+        std::cout << "Results directory already exists." << std::endl;
+    }
+
+    std::cout << "Writing results to: " << results_path << std::endl;
+    std::cout << "Writing interval: " << output_interval << std::endl;
+}
+
 void purgeOutput(const bool purge_output, const std::string& results_path) {
     if (purge_output) {
         // Remove txt and lst files
@@ -39,6 +62,15 @@ void purgeOutput(const bool purge_output, const std::string& results_path) {
         std::filesystem::remove_all(results_path + "gid_output/");
         std::filesystem::remove_all(results_path + "vtu_output/");
     }
+}
+
+void printMeshData(int num_nodes, int num_cells, auto & box_divisions, auto & cell_size) {
+    std::cout << "\n### MESH DATA ###" << std::endl;
+    std::cout << "num_nodes: " << num_nodes << std::endl;
+    std::cout << "num_cells: " << num_cells << std::endl;
+
+    std::cout << "box_divisions: [ "; std::ranges::copy(box_divisions, std::ostream_iterator<double>(std::cout, " ")); std::cout << "]" << std::endl;
+    std::cout << "cell_size: [ ";     std::ranges::copy(cell_size,     std::ostream_iterator<double>(std::cout, " ")); std::cout << "]" << std::endl;
 }
 
 int main()
@@ -84,6 +116,7 @@ int main()
     std::cout << "### PROBLEM DATA ###" << std::endl;
     std::cout << "mu: " << mu << std::endl;
     std::cout << "rho: " << rho << std::endl;
+
     // if (artificial_compressibility) {
     //     std::cout << "sound_velocity: " << sound_velocity << std::endl;
     // }
@@ -101,43 +134,22 @@ int main()
 
     // Input mesh data
     const std::array<double, dim> box_size({1.0, 1.0});
-    const std::array<int, dim> box_divisions({500, 500});
+    const std::array<int,    dim> box_divisions({500, 500});
 
     // Compute mesh data
-    // auto mesh_data = MeshUtilities<dim>::CalculateMeshData(box_divisions);
-    auto cell_size = MeshUtilities<dim>::CalculateCellSize(box_size, box_divisions);
+    auto cell_size              = MeshUtilities<dim>::CalculateCellSize(box_size, box_divisions);
     auto [num_nodes, num_cells] = MeshUtilities<dim>::CalculateMeshData(box_divisions);
-    // const int num_cells = std::get<1>(mesh_data);
 
-    std::cout << "\n### MESH DATA ###" << std::endl;
-    std::cout << "num_nodes: " << num_nodes << std::endl;
-    std::cout << "num_cells: " << num_cells << std::endl;
-    if constexpr (dim == 2) {
-        std::cout << "box_divisions: [" << box_divisions[0] << "," << box_divisions[1] << "]" << std::endl;
-        std::cout << "cell_size: [" << cell_size[0] << "," << cell_size[1] << "]" << std::endl;
-    } else {
-        std::cout << "box_divisions: [" << box_divisions[0] << "," << box_divisions[1] << "," << box_divisions[2] <<  "]" << std::endl;
-        std::cout << "cell_size: [" << cell_size[0] << "," << cell_size[1] << "," << cell_size[2] <<  "]" << std::endl;
-    }
+    printMeshData(num_nodes, num_cells, box_divisions, cell_size);
 
     // Create results directory
-    std::cout << "\n### OUTPUT DATA ###" << std::endl;
-    struct stat buffer;
     const std::string results_path = "../cpp_output/";
-    if (!(stat(results_path.c_str(), &buffer) == 0 && S_ISDIR(buffer.st_mode))) {
-        const int result = mkdir(results_path.c_str(), 0777); // 0777 means full access to everyone
-        if (result == 0) {
-            std::cout << "Results directory created successfully." << std::endl;
-        } else {
-            std::cerr << "Failed to create results directory." << std::endl;
-        }
-    } else {
-        std::cout << "Results directory already exists." << std::endl;
-    }
-    std::cout << "Writing results to: " << results_path << std::endl;
-
     const unsigned int output_interval = 1;
-    std::cout << "Writing interval: " << output_interval << std::endl;
+
+    std::cout << "\n### OUTPUT DATA ###" << std::endl;
+
+    // Prepares output directory structure
+    prepareOutput(results_path, output_interval);
 
     // Purge previous output
     purgeOutput(purge_output, results_path);
@@ -459,188 +471,201 @@ int main()
     unsigned int tot_p_iters = 0;
     unsigned int current_step = 1;
     double current_time = init_time;
+
     while (current_time < end_time) {
         // Compute time increment with CFL and Fourier conditions
         // Note that we use the current step velocity to be updated as it equals the previous one at this point
         const double dt = TimeUtilities<dim>::CalculateDeltaTime(rho, mu, cell_size, v, 0.2, 0.2);
         std::cout << "\n### Step " << current_step << " - time " << current_time << " - dt " << dt << " ###" << std::endl;
 
-        // // Set current time increment into the pressure operator object
-        // p_pressure_operator->SetDeltaTime(dt);
+        Perf::execute("Initialize", [&] {
+            // // Set current time increment into the pressure operator object
+            // p_pressure_operator->SetDeltaTime(dt);
 
-        // Update the surrogate boundary Dirichlet value from the previous time step velocity gradient
-        SbmUtilities<dim>::UpdateSurrogateBoundaryDirichletValues(mass_factor, box_divisions, cell_size, surrogate_cells, surrogate_nodes, lumped_mass_vector, distance_vects, v, v_surrogate);
-        for (unsigned int i = 0; i < num_nodes; ++i) {
-            if (surrogate_nodes[i]) {
-                for (unsigned int d = 0; d < dim; ++d) {
-                    v(i, d) = v_surrogate(i, d);
-                    v_n(i, d) = v_surrogate(i, d);
-                }
-            }
-        }
-
-        // Calculate intermediate residuals
-        for (unsigned int rk_step = 0; rk_step < rk_num_steps; ++rk_step) {
-            // Initialize current intermediate step residual
+            // Update the surrogate boundary Dirichlet value from the previous time step velocity gradient
+            SbmUtilities<dim>::UpdateSurrogateBoundaryDirichletValues(mass_factor, box_divisions, cell_size, surrogate_cells, surrogate_nodes, lumped_mass_vector, distance_vects, v, v_surrogate);
             for (unsigned int i = 0; i < num_nodes; ++i) {
-                for (unsigned int j = 0; j < dim; ++j) {
-                    rk_res(rk_step, i, j) = 0.0;
-                }
-            }
-
-            // Calculate current step velocity for residual calculation
-            const double rk_theta = rk_C[rk_step];
-            const double rk_step_time = current_time + rk_theta * dt;
-            MdspanUtilities::SetZero(rk_v);
-            for (unsigned int i_step = 0; i_step < rk_step; ++i_step) {
-                const double a_ij = rk_A(rk_step, i_step);
-                for (unsigned int i = 0; i < num_nodes; ++i) {
+                if (surrogate_nodes[i]) {
                     for (unsigned int d = 0; d < dim; ++d) {
-                        rk_v(i, d) += a_ij * rk_res(i_step, i, d);
+                        v(i, d) = v_surrogate(i, d);
+                        v_n(i, d) = v_surrogate(i, d);
                     }
                 }
             }
 
+            // Calculate intermediate residuals
+            for (unsigned int rk_step = 0; rk_step < rk_num_steps; ++rk_step) {
+                // Initialize current intermediate step residual
+                for (unsigned int i = 0; i < num_nodes; ++i) {
+                    for (unsigned int j = 0; j < dim; ++j) {
+                        rk_res(rk_step, i, j) = 0.0;
+                    }
+                }
+
+                // Calculate current step velocity for residual calculation
+                const double rk_theta = rk_C[rk_step];
+                const double rk_step_time = current_time + rk_theta * dt;
+                MdspanUtilities::SetZero(rk_v);
+                for (unsigned int i_step = 0; i_step < rk_step; ++i_step) {
+                    const double a_ij = rk_A(rk_step, i_step);
+                    for (unsigned int i = 0; i < num_nodes; ++i) {
+                        for (unsigned int d = 0; d < dim; ++d) {
+                            rk_v(i, d) += a_ij * rk_res(i_step, i, d);
+                        }
+                    }
+                }
+
+                for (unsigned int i_dof = 0; i_dof < n_free_dofs; ++i_dof) {
+                    const unsigned int dof_row = free_dofs_rows[i_dof];
+                    const unsigned int dof_col = free_dofs_cols[i_dof];
+                    rk_v(dof_row, dof_col) *= dt * lumped_mass_vector_inv(dof_row, dof_col); // Calculate current intermediate step velocity correction
+                    rk_v(dof_row, dof_col) += v_n(dof_row, dof_col); // Add it to the previous step velocity
+                }
+
+                for (unsigned int i_dof = 0; i_dof < n_fixed_dofs; ++i_dof) {
+                    const unsigned int dof_row = fixed_dofs_rows[i_dof];
+                    const unsigned int dof_col = fixed_dofs_cols[i_dof];
+                    rk_v(dof_row, dof_col) = rk_theta * v(dof_row, dof_col) + (1.0 - rk_theta) * v_n(dof_row, dof_col); // Set BC value in fixed DOFs
+                }
+
+                // Calculate current step residual
+                if constexpr (dim == 2) {
+                    double cell_v_data[8];
+                    double cell_f_data[8];
+                    double cell_acc_data[8];
+                    IncompressibleNavierStokesQ1P0StructuredElement::QuadVectorDataView cell_v(cell_v_data);
+                    IncompressibleNavierStokesQ1P0StructuredElement::QuadVectorDataView cell_f(cell_f_data);
+                    IncompressibleNavierStokesQ1P0StructuredElement::QuadVectorDataView cell_acc(cell_acc_data);
+                    std::array<int,4> cell_node_ids;
+                    std::array<double, 8> cell_res;
+                    for (unsigned int i = 0; i < box_divisions[1]; ++i) {
+                        for (unsigned int j = 0; j < box_divisions[0]; ++j) {
+                            const unsigned int i_cell = CellUtilities::GetCellGlobalId(i, j, box_divisions);
+                            if (active_cells[i_cell]) {
+                                // Get current cell data
+                                CellUtilities::GetCellNodesGlobalIds(i, j, box_divisions, cell_node_ids);
+                                const double cell_p = p[i_cell];
+                                for (unsigned int i_node = 0; i_node < cell_nodes; ++i_node) {
+                                    for (unsigned int d = 0; d < dim; ++d) {
+                                        cell_f(i_node, d) = f(cell_node_ids[i_node], d);
+                                        cell_v(i_node, d) = rk_v(cell_node_ids[i_node], d);
+                                        cell_acc(i_node, d) = acc(cell_node_ids[i_node], d);
+                                    }
+                                }
+
+                                // Calculate current cell residual
+                                IncompressibleNavierStokesQ1P0StructuredElement::CalculateRightHandSide(cell_size[0], cell_size[1], mu, rho, cell_v, cell_p, cell_f, cell_acc, cell_res);
+
+                                // Assemble current cell residual
+                                unsigned int aux_i = 0;
+                                for (const int id_node : cell_node_ids) {
+                                    for (unsigned int d = 0; d < 2; ++d) {
+                                        rk_res(rk_step, id_node, d) += cell_res[2 * aux_i + d];
+                                    }
+                                    aux_i++;
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    throw std::logic_error("3D case not implemented yet");
+                }
+            }
+        });
+
+        // Solve Runge-Kutta step in the free velocity DOFs
+        Perf::execute("Runge-Kutta", [&] {
             for (unsigned int i_dof = 0; i_dof < n_free_dofs; ++i_dof) {
                 const unsigned int dof_row = free_dofs_rows[i_dof];
                 const unsigned int dof_col = free_dofs_cols[i_dof];
-                rk_v(dof_row, dof_col) *= dt * lumped_mass_vector_inv(dof_row, dof_col); // Calculate current intermediate step velocity correction
-                rk_v(dof_row, dof_col) += v_n(dof_row, dof_col); // Add it to the previous step velocity
-            }
-
-            for (unsigned int i_dof = 0; i_dof < n_fixed_dofs; ++i_dof) {
-                const unsigned int dof_row = fixed_dofs_rows[i_dof];
-                const unsigned int dof_col = fixed_dofs_cols[i_dof];
-                rk_v(dof_row, dof_col) = rk_theta * v(dof_row, dof_col) + (1.0 - rk_theta) * v_n(dof_row, dof_col); // Set BC value in fixed DOFs
-            }
-
-            // Calculate current step residual
-            if constexpr (dim == 2) {
-                double cell_v_data[8];
-                double cell_f_data[8];
-                double cell_acc_data[8];
-                IncompressibleNavierStokesQ1P0StructuredElement::QuadVectorDataView cell_v(cell_v_data);
-                IncompressibleNavierStokesQ1P0StructuredElement::QuadVectorDataView cell_f(cell_f_data);
-                IncompressibleNavierStokesQ1P0StructuredElement::QuadVectorDataView cell_acc(cell_acc_data);
-                std::array<int,4> cell_node_ids;
-                std::array<double, 8> cell_res;
-                for (unsigned int i = 0; i < box_divisions[1]; ++i) {
-                    for (unsigned int j = 0; j < box_divisions[0]; ++j) {
-                        const unsigned int i_cell = CellUtilities::GetCellGlobalId(i, j, box_divisions);
-                        if (active_cells[i_cell]) {
-                            // Get current cell data
-                            CellUtilities::GetCellNodesGlobalIds(i, j, box_divisions, cell_node_ids);
-                            const double cell_p = p[i_cell];
-                            for (unsigned int i_node = 0; i_node < cell_nodes; ++i_node) {
-                                for (unsigned int d = 0; d < dim; ++d) {
-                                    cell_f(i_node, d) = f(cell_node_ids[i_node], d);
-                                    cell_v(i_node, d) = rk_v(cell_node_ids[i_node], d);
-                                    cell_acc(i_node, d) = acc(cell_node_ids[i_node], d);
-                                }
-                            }
-
-                            // Calculate current cell residual
-                            IncompressibleNavierStokesQ1P0StructuredElement::CalculateRightHandSide(cell_size[0], cell_size[1], mu, rho, cell_v, cell_p, cell_f, cell_acc, cell_res);
-
-                            // Assemble current cell residual
-                            unsigned int aux_i = 0;
-                            for (const int id_node : cell_node_ids) {
-                                for (unsigned int d = 0; d < 2; ++d) {
-                                    rk_res(rk_step, id_node, d) += cell_res[2 * aux_i + d];
-                                }
-                                aux_i++;
-                            }
-                        }
-                    }
+                v(dof_row, dof_col) = 0.0;
+                for (unsigned int rk_step = 0; rk_step < rk_num_steps; ++rk_step) {
+                    v(dof_row, dof_col) += rk_B[rk_step] * rk_res(rk_step, dof_row, dof_col);
                 }
-            } else {
-                throw std::logic_error("3D case not implemented yet");
+                v(dof_row, dof_col) *= dt * lumped_mass_vector_inv(dof_row, dof_col);
+                v(dof_row, dof_col) += v_n(dof_row, dof_col);
             }
-        }
+        });
 
-        // Solve Runge-Kutta step in the free velocity DOFs
-        for (unsigned int i_dof = 0; i_dof < n_free_dofs; ++i_dof) {
-            const unsigned int dof_row = free_dofs_rows[i_dof];
-            const unsigned int dof_col = free_dofs_cols[i_dof];
-            v(dof_row, dof_col) = 0.0;
-            for (unsigned int rk_step = 0; rk_step < rk_num_steps; ++rk_step) {
-                v(dof_row, dof_col) += rk_B[rk_step] * rk_res(rk_step, dof_row, dof_col);
-            }
-            v(dof_row, dof_col) *= dt * lumped_mass_vector_inv(dof_row, dof_col);
-            v(dof_row, dof_col) += v_n(dof_row, dof_col);
-        }
         std::cout << "Velocity prediction solved." << std::endl;
 
         // Solve pressure update
-        Operators<dim>::ApplyDivergenceOperator(box_divisions, cell_size, active_cells, v, delta_p_rhs);
-        //TODO: Do something to skip this loop (maybe a pass a factor to ApplyDivergenceOperator)
-        // const double mass_factor = std::reduce(cell_size.begin(), cell_size.end(), 1.0, std::multiplies<>());
-        // const double bulk_factor = mass_factor / (rho * std::pow(sound_velocity, 2));
-        for (unsigned int i = 0; i < num_cells; ++i) {
-            delta_p_rhs[i] = -delta_p_rhs[i] / dt;
-            // delta_p_rhs[i] += bulk_factor * p[i];
-        }
-        if (output_pressure_arrays) {
-            MeshUtilities<dim>::OutputVector(delta_p_rhs, "b_" + std::to_string(box_divisions[0]) + "_" + std::to_string(box_divisions[1]) + "_" + std::to_string(current_step), results_path);
-        }
+        Perf::execute("Pressure Update", [&] {
+            Operators<dim>::ApplyDivergenceOperator(box_divisions, cell_size, active_cells, v, delta_p_rhs);
+            //TODO: Do something to skip this loop (maybe a pass a factor to ApplyDivergenceOperator)
+            // const double mass_factor = std::reduce(cell_size.begin(), cell_size.end(), 1.0, std::multiplies<>());
+            // const double bulk_factor = mass_factor / (rho * std::pow(sound_velocity, 2));
+            for (unsigned int i = 0; i < num_cells; ++i) {
+                delta_p_rhs[i] = -delta_p_rhs[i] / dt;
+                // delta_p_rhs[i] += bulk_factor * p[i];
+            }
+            if (output_pressure_arrays) {
+                MeshUtilities<dim>::OutputVector(delta_p_rhs, "b_" + std::to_string(box_divisions[0]) + "_" + std::to_string(box_divisions[1]) + "_" + std::to_string(current_step), results_path);
+            }
 
-        std::fill(delta_p.begin(), delta_p.end(), 0.0);
-        const bool is_converged = cg.Solve(delta_p_rhs, delta_p);
-        for (unsigned int i = 0; i < num_cells; ++i) {
-            p[i] += delta_p[i];
-        }
-        tot_p_iters += cg.Iterations();
-        if (is_converged) {
-            std::cout << "Pressure problem converged in " << cg.Iterations() << " iterations." << std::endl;
-        } else {
-            std::cout << "Pressure problem did not converge in " << cg.Iterations() << " iterations." << std::endl;
-        }
+            std::fill(delta_p.begin(), delta_p.end(), 0.0);
+            const bool is_converged = cg.Solve(delta_p_rhs, delta_p);
+            for (unsigned int i = 0; i < num_cells; ++i) {
+                p[i] += delta_p[i];
+            }
+            tot_p_iters += cg.Iterations();
+            if (is_converged) {
+                std::cout << "Pressure problem converged in " << cg.Iterations() << " iterations." << std::endl;
+            } else {
+                std::cout << "Pressure problem did not converge in " << cg.Iterations() << " iterations." << std::endl;
+            }
+        });
 
         // Correct velocity value in the free DOFs
-        Operators<dim>::ApplyGradientOperator(box_divisions, cell_size, active_cells, delta_p, delta_p_grad);
-        for (unsigned int i_dof = 0; i_dof < n_free_dofs; ++i_dof) {
-            const unsigned int dof_row = free_dofs_rows[i_dof];
-            const unsigned int dof_col = free_dofs_cols[i_dof];
-            v(dof_row, dof_col) += dt * lumped_mass_vector_inv(dof_row, dof_col) * delta_p_grad(dof_row, dof_col);
-        }
-        std::cout << "Velocity update finished." << std::endl;
+        Perf::execute("Velocity Update", [&] {
+            Operators<dim>::ApplyGradientOperator(box_divisions, cell_size, active_cells, delta_p, delta_p_grad);
+            for (unsigned int i_dof = 0; i_dof < n_free_dofs; ++i_dof) {
+                const unsigned int dof_row = free_dofs_rows[i_dof];
+                const unsigned int dof_col = free_dofs_cols[i_dof];
+                v(dof_row, dof_col) += dt * lumped_mass_vector_inv(dof_row, dof_col) * delta_p_grad(dof_row, dof_col);
+            }
+            std::cout << "Velocity update finished." << std::endl;
+        });
 
         // Output current step solution
-        if ((current_step % output_interval) < 1.0e-12)  {
-            std::ofstream v_file(results_path + "v_" + std::to_string(current_step) + ".txt");
-            std::ofstream p_file(results_path + "p_" + std::to_string(current_step) + ".txt");
-            if (v_file.is_open()) {
-                v_file << current_time << std::endl;
-                for (unsigned int i = 0; i < num_nodes; ++i) {
-                    for (unsigned int d = 0; d < dim; ++d) {
-                        v_file << v(i,d);
-                        if (d < dim - 1) {
-                            v_file << ", ";
-                        } else {
-                            v_file << "\n";
+        Perf::execute("Print Output", [&] {
+            if ((current_step % output_interval) < 1.0e-12)  {
+                std::ofstream v_file(results_path + "v_" + std::to_string(current_step) + ".txt");
+                std::ofstream p_file(results_path + "p_" + std::to_string(current_step) + ".txt");
+                if (v_file.is_open()) {
+                    v_file << current_time << std::endl;
+                    for (unsigned int i = 0; i < num_nodes; ++i) {
+                        for (unsigned int d = 0; d < dim; ++d) {
+                            v_file << v(i,d);
+                            if (d < dim - 1) {
+                                v_file << ", ";
+                            } else {
+                                v_file << "\n";
+                            }
                         }
                     }
+                    v_file.close();
                 }
-                v_file.close();
-            }
-            if (p_file.is_open()) {
-                p_file << current_time << std::endl;
-                for (unsigned int i = 0; i < num_cells; ++i) {
-                    p_file << p[i] << std::endl;
+                if (p_file.is_open()) {
+                    p_file << current_time << std::endl;
+                    for (unsigned int i = 0; i < num_cells; ++i) {
+                        p_file << p[i] << std::endl;
+                    }
+                    p_file.close();
                 }
-                p_file.close();
+                std::cout << "Results output completed." << std::endl;
             }
-            std::cout << "Results output completed." << std::endl;
-        }
 
-        // Update variables for next time step
-        for (unsigned int i = 0; i < num_nodes; ++i) {
-            for (unsigned int d = 0; d < dim; ++d) {
-                acc(i, d) = (v(i, d) - v_n(i, d)) / dt;
-                v_n(i, d) = v(i, d);
+            // Update variables for next time step
+            for (unsigned int i = 0; i < num_nodes; ++i) {
+                for (unsigned int d = 0; d < dim; ++d) {
+                    acc(i, d) = (v(i, d) - v_n(i, d)) / dt;
+                    v_n(i, d) = v(i, d);
+                }
             }
-        }
 
+        });
+        
         if (current_step == 1) {
             break;
         }
