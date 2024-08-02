@@ -684,7 +684,7 @@ int main()
     free(rk_res_data);
 
     // Print final data
-    std::cout << "TOTAL PRESSURE ITERATIONS: " << tot_p_iters << std::endl;
+    std::cout << "TOTAL PRESSURE ITERATIONS:   " << tot_p_iters << std::endl;
     std::cout << "AVERAGE PRESSURE ITERATIONS: " << tot_p_iters / current_step << std::endl;
 
     return 0;
