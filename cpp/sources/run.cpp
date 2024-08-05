@@ -24,7 +24,8 @@
 #include "pressure_preconditioner.hpp"
 #include "fft_pressure_preconditioner.hpp"
 #include "deflation_pressure_preconditioner.hpp"
-#include "pressure_conjugate_gradient_solver.hpp"
+// #include "pressure_conjugate_gradient_solver.hpp"
+#include "pressure_conjugate_gradient_solver_gpu.hpp"
 #include "incompressible_navier_stokes_q1_p0_structured_element.hpp"
 
 #include "utilities/perf.h"
@@ -210,7 +211,8 @@ int main()
 
     // Set velocity fixity vector and BCs
     // Note that these overwrite the initial conditions above
-    bool fixity_data[num_nodes*dim];
+    // Note that we cannot make spans of this as bool because arrays of non constexpr size are a clang extension that works because yolo and data() from std::vectro<bool> is protected because it does shaddy things with the memory
+    bool * fixity_data = (bool *)malloc(sizeof(bool) * num_nodes*dim);
     std::experimental::mdspan<bool, std::experimental::extents<std::size_t, std::dynamic_extent, dim>> fixity(fixity_data, num_nodes, dim);
     MdspanUtilities::SetZero(fixity);
 
@@ -449,22 +451,22 @@ int main()
     p_pressure_preconditioner->SetUp();
 
     std::cout << "\n### PRESSURE SOLVER SET-UP ###" << std::endl;
-    // std::unique_ptr<PressureOperator<dim>> p_pressure_operator;
+    // std::unique_ptr<PressureOperator> p_pressure_operator;
     // if (artificial_compressibility) {
-    //     auto p_aux = std::make_unique<PressureOperator<dim>>(rho, sound_velocity, box_divisions, cell_size, active_cells, lumped_mass_vector_inv_bcs);
+    //     auto p_aux = std::make_unique<PressureOperator>(rho, sound_velocity, box_divisions, cell_size, active_cells, lumped_mass_vector_inv_bcs);
     //     std::swap(p_pressure_operator, p_aux);
     // } else {
-    //     auto p_aux = std::make_unique<PressureOperator<dim>>(box_divisions, cell_size, active_cells, lumped_mass_vector_inv_bcs);
+    //     auto p_aux = std::make_unique<PressureOperator>(box_divisions, cell_size, active_cells, lumped_mass_vector_inv_bcs);
     //     std::swap(p_pressure_operator, p_aux);
     // }
-    // PressureOperator<dim> pressure_operator(box_divisions, cell_size, active_cells, lumped_mass_vector_inv_bcs);
-    PressureOperator<dim> pressure_operator(box_divisions, cell_size, active_cells, lumped_mass_vector_inv);
+    // PressureOperator pressure_operator(box_divisions, cell_size, active_cells, lumped_mass_vector_inv_bcs);
+    PressureOperator pressure_operator(box_divisions, cell_size, active_cells, lumped_mass_vector_inv);
     if (output_pressure_arrays) {
         pressure_operator.Output("pressure_matrix_" + std::to_string(box_divisions[0]) + "_" + std::to_string(box_divisions[1]), results_path);
     }
     std::cout << "Pressure linear operator created." << std::endl;
 
-    PressureConjugateGradientSolver<dim> cg(pres_abs_tol, pres_rel_tol, pres_max_iter, pressure_operator, p_pressure_preconditioner);
+    PressureConjugateGradientSolverGPU<dim> cg(pres_abs_tol, pres_rel_tol, pres_max_iter, pressure_operator, p_pressure_preconditioner);
     std::cout << "Pressure conjugate gradient solver created." << std::endl;
 
     // Time loop
@@ -590,7 +592,8 @@ int main()
         std::cout << "Velocity prediction solved." << std::endl;
 
         // Solve pressure update
-        Perf::execute("Pressure Update", [&] {
+        bool is_converged = false;
+        Perf::execute("Pressure Update 1", [&] {
             Operators<dim>::ApplyDivergenceOperator(box_divisions, cell_size, active_cells, v, delta_p_rhs);
             //TODO: Do something to skip this loop (maybe a pass a factor to ApplyDivergenceOperator)
             // const double mass_factor = std::reduce(cell_size.begin(), cell_size.end(), 1.0, std::multiplies<>());
@@ -604,11 +607,15 @@ int main()
             }
 
             std::fill(delta_p.begin(), delta_p.end(), 0.0);
-            const bool is_converged = cg.Solve(delta_p_rhs, delta_p);
+            is_converged = cg.Solve(delta_p_rhs, delta_p);
+        });
+
+        Perf::execute("Pressure Update 2", [&] {
             for (unsigned int i = 0; i < num_cells; ++i) {
                 p[i] += delta_p[i];
             }
             tot_p_iters += cg.Iterations();
+
             if (is_converged) {
                 std::cout << "Pressure problem converged in " << cg.Iterations() << " iterations." << std::endl;
             } else {
@@ -682,6 +689,7 @@ int main()
     free(lumped_mass_inv_data);
     free(rk_v_data);
     free(rk_res_data);
+    free(fixity_data);
 
     // Print final data
     std::cout << "TOTAL PRESSURE ITERATIONS:   " << tot_p_iters << std::endl;

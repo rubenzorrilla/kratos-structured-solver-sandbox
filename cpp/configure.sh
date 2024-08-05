@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Load intel libraries
-source /home/roigcarlo/intel/oneapi/2024.0/oneapi-vars.sh intel64
+source /opt/intel/oneapi/setvars.sh intel64
 
 # Set compiler
 # export CC=/usr/bin/clang
@@ -9,15 +9,16 @@ source /home/roigcarlo/intel/oneapi/2024.0/oneapi-vars.sh intel64
 export CXX=icpx
 
 # Set variables
-export SOURCE_DIR="/home/roigcarlo/kratos-structured-solver-sandbox/cpp"
+export SOURCE_DIR="/home/kratos/kratos-structured-solver-sandbox/cpp"
 export BUILD_DIR="${SOURCE_DIR}/build"
 #export FFTW
 
 # Set basic configuration
-export BUILD_TYPE="Release"
+export BUILD_TYPE="Debug"
 
 # Set basic sycl flags to allow GCGPU
-export SYCL_FLAGS="-fsycl -fsycl-targets=nvptx64-nvidia-cuda -fsycl-unnamed-lambda"
+# export SYCL_FLAGS="-fsycl -fsycl-targets=nvptx64-nvidia-cuda -fsycl-unnamed-lambda"
+export SYCL_FLAGS="-fsycl -fsycl-targets=spir64_x86_64 -fsycl-unnamed-lambda"
 
 # Clean
 clear
@@ -31,7 +32,7 @@ rm -rf "${BUILD_DIR}/${BUILD_TYPE}/CMakeFiles"
 # -B: build directory (temporary files during compilation)
 # -DCMAKE_INSTALL_PREFIX: installation directory (where the result of the compilation will appear)
 # -DCMAKE_CXX_FLAGS: flags for the C++ compiler
-cmake -G Ninja -H"${SOURCE_DIR}" -B"${BUILD_DIR}/${BUILD_TYPE}" -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" -DCMAKE_INSTALL_PREFIX="${SOURCE_DIR}/bin" -DCMAKE_CXX_FLAGS="${SYCL_FLAGS}"
+cmake -H"${SOURCE_DIR}" -B"${BUILD_DIR}/${BUILD_TYPE}" -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" -DCMAKE_INSTALL_PREFIX="${SOURCE_DIR}/bin" -DCMAKE_CXX_FLAGS="${SYCL_FLAGS}"
 
 # Buid and install
 cmake --build "${BUILD_DIR}/${BUILD_TYPE}" --target install -- -j$(nproc)

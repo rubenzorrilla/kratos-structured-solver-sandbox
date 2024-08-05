@@ -1,9 +1,6 @@
 #include <fstream>
 #include <iostream>
 
-// Intel sycl
-#include <CL/sycl.hpp>
-
 #include "cell_utilities.hpp"
 #include "mesh_utilities.hpp"
 #include "incompressible_navier_stokes_q1_p0_structured_element.hpp"

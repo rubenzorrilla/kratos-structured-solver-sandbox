@@ -2,13 +2,18 @@
 #include <fstream>
 #include <iomanip>
 
+// Intel sycl
+#include <CL/sycl.hpp>
+
 #include "cell_utilities.hpp"
 #include "mesh_utilities.hpp"
 #include "operators.hpp"
+#include "incompressible_navier_stokes_q1_p0_structured_element.hpp"
 
 #pragma once
 
-template<int TDim>
+#define TDim 2
+
 class PressureOperator
 {
 public:
@@ -28,33 +33,107 @@ public:
         , mrBoxDivisions(rBoxDivisions)
         , mrActiveCells(rActiveCells)
         , mrLumpedMassVectorInv(rLumpedMassVectorInv)
+        , mNnodes(std::get<0>(MeshUtilities<TDim>::CalculateMeshData(mrBoxDivisions)))
     {
         mIsInitialized = true;
         // mArtificialCompressibility = false;
+        mAuxData = (double *)malloc(sizeof(double) * mNnodes * TDim);
     }
 
-    // PressureOperator(
-    //     const double Rho,
-    //     const double SoundVelocity,
-    //     const std::array<int, TDim>& rBoxDivisions,
-    //     const std::array<double, TDim>& rCellSize,
-    //     const std::vector<bool>& rActiveCells,
-    //     const MatrixViewType& rLumpedMassVectorInv)
-    //     : mRho(Rho)
-    //     , mSoundVelocity(SoundVelocity)
-    //     , mrCellSize(rCellSize)
-    //     , mrBoxDivisions(rBoxDivisions)
-    //     , mrActiveCells(rActiveCells)
-    //     , mrLumpedMassVectorInv(rLumpedMassVectorInv)
-    // {
-    //     mIsInitialized = true;
-    //     mArtificialCompressibility = true;
-    // }
+    ~PressureOperator()
+    {
+        free(mAuxData);
+    }
 
     // void SetDeltaTime(const double DeltaTime)
     // {
     //     mDeltaTime = DeltaTime;
     // }
+
+    void LocalApplyGradientOperator(
+        const std::array<int, TDim>& rBoxDivisions,
+        const std::array<double, TDim>& rCellSize,
+        const std::vector<bool>& rActiveCells,
+        const auto & rX,
+        MatrixViewType& rOutput
+    ) 
+    {
+        // Check output matrix sizes (i.e. mdspan extent)
+        const unsigned int n_nodes = std::get<0>(MeshUtilities<2>::CalculateMeshData(rBoxDivisions));
+        if (rOutput.extent(0) != n_nodes || rOutput.extent(1) != 2) {
+            // throw std::logic_error("Wrong size in mdspan extent.");
+            // std::cout << "Wrong size in mdspan extent." << std::endl;
+        }
+
+        // Initialize output matrix
+        for (unsigned int i = 0; i < rOutput.extent(0); ++i) {
+            rOutput(i, 0) = 0.0;
+            rOutput(i, 1) = 0.0;
+        }
+
+        // Get the cell gradient operator
+        // Eigen::Array<double,4,2> cell_gradient_operator;
+        double cell_gradient_operator_data[8];
+        IncompressibleNavierStokesQ1P0StructuredElement::QuadVectorDataView cell_gradient_operator(cell_gradient_operator_data, 4, 2);
+        IncompressibleNavierStokesQ1P0StructuredElement::GetCellGradientOperator(rCellSize[0], rCellSize[1], cell_gradient_operator);
+
+        // Apply the gradient operator onto a vector
+        std::array<int,4> cell_node_ids;
+        for (unsigned int i = 0; i < rBoxDivisions[1]; ++i) {
+            for (unsigned int j = 0; j < rBoxDivisions[0]; ++j) {
+                const unsigned int cell_id = CellUtilities::GetCellGlobalId(i, j, rBoxDivisions);
+                if (rActiveCells[cell_id]) {
+                    const double x = rX[cell_id];
+                    CellUtilities::GetCellNodesGlobalIds(i, j, rBoxDivisions, cell_node_ids);
+                    unsigned int i_node = 0;
+                    for (unsigned int id_node : cell_node_ids) {
+                        rOutput(id_node, 0) += cell_gradient_operator(i_node, 0) * x;
+                        rOutput(id_node, 1) += cell_gradient_operator(i_node, 1) * x;
+                        i_node++;
+                    }
+                }
+            }
+        }
+    }
+
+    void LocalApplyDivergenceOperator(
+        const std::array<int, TDim>& rBoxDivisions,
+        const std::array<double, TDim>& rCellSize,
+        const std::vector<bool>& rActiveCells,
+        const MatrixViewType& rX,
+        auto & rOutput
+    ) {
+        // Resize and initialize output matrix
+        const unsigned int n_cells = std::get<1>(MeshUtilities<2>::CalculateMeshData(rBoxDivisions));
+        if (rOutput.size() != n_cells) {
+            // This shall be done BEFORE creating the buffer for GPU
+            // rOutput.resize(n_cells);
+        }
+
+        // Get the cell gradient operator
+        // Eigen::Array<double,4,2> cell_gradient_operator;
+        double cell_gradient_operator_data[8];
+        IncompressibleNavierStokesQ1P0StructuredElement::QuadVectorDataView cell_gradient_operator(cell_gradient_operator_data, 4, 2);
+        IncompressibleNavierStokesQ1P0StructuredElement::GetCellGradientOperator(rCellSize[0], rCellSize[1], cell_gradient_operator);
+
+        // Apply the gradient operator onto a vector
+        std::array<int,4> cell_node_ids;
+        for (unsigned int i = 0; i < rBoxDivisions[1]; ++i) {
+            for (unsigned int j = 0; j < rBoxDivisions[0]; ++j) {
+                const unsigned int cell_id = CellUtilities::GetCellGlobalId(i, j, rBoxDivisions);
+                double& r_val = rOutput[cell_id];
+                r_val = 0.0;
+                if (rActiveCells[cell_id]) {
+                    CellUtilities::GetCellNodesGlobalIds(i, j, rBoxDivisions, cell_node_ids);
+                    for (unsigned int  d = 0; d < 2; ++d) {
+                        for (unsigned int i_node = 0; i_node < 4; ++i_node) {
+                            r_val += cell_gradient_operator(i_node, d) * rX(cell_node_ids[i_node], d);
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     /**
      * @brief Applies the pressure operator to the input vector
@@ -69,11 +148,7 @@ public:
         const VectorType& rInput,
         VectorType& rOutput) const
     {
-        // Allocate auxiliary array
-        //TODO: This must be done once
-        const unsigned int n_nodes = std::get<0>(MeshUtilities<TDim>::CalculateMeshData(mrBoxDivisions));
-        double * aux_data = (double *)malloc(sizeof(double) * n_nodes * TDim);
-        MatrixViewType aux(aux_data, n_nodes, TDim);
+        MatrixViewType aux(mAuxData, mNnodes, TDim);
 
         // Apply gradient operator to input vector
         Operators<TDim>::ApplyGradientOperator(mrBoxDivisions, mrCellSize, mrActiveCells, rInput, aux);
@@ -138,8 +213,27 @@ public:
         //         }
         //     }
         // // }
+    }
 
-        free(aux_data);
+    template<class src_accessor_t, class dst_accessor_t>
+    SYCL_EXTERNAL void ApplyGPU(
+        const src_accessor_t& rInput,
+              dst_accessor_t& rOutput)
+    {
+        MatrixViewType aux(mAuxData, mNnodes, TDim);
+
+        // Apply gradient operator to input vector
+        LocalApplyGradientOperator(mrBoxDivisions, mrCellSize, mrActiveCells, rInput, aux);
+
+        // Apply the lumped mass inverse to the auxiliary vector
+        for (unsigned int i = 0; i < mrLumpedMassVectorInv.extent(0); ++i) {
+            for (unsigned int j = 0; j < mrLumpedMassVectorInv.extent(1); ++j) {
+                aux(i, j) *= mrLumpedMassVectorInv(i, j);
+            }
+        }
+
+        // Apply the divergence operator to the auxiliary vector and store the result in the output array
+        LocalApplyDivergenceOperator(mrBoxDivisions, mrCellSize, mrActiveCells, aux, rOutput);
     }
 
     void Output(
@@ -226,6 +320,8 @@ private:
 
     // const double mSoundVelocity = 0.0;
 
+    double * mAuxData;
+
     const std::array<double, TDim>& mrCellSize;
 
     const std::array<int, TDim>& mrBoxDivisions;
@@ -234,4 +330,8 @@ private:
 
     const MatrixViewType& mrLumpedMassVectorInv;
 
+    const int mNnodes;
+
 };
+
+#undef TDim 

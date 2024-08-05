@@ -81,16 +81,16 @@ public:
             VectorType y(mProblemSize);
             x[free_cell_id] = 1.0;
 
-            PressureOperator<TDim> periodic_pressure_operator(mrBoxDivisions, mrCellSize, mrActiveCells, mrLumpedMassVectorInv);
+            PressureOperator periodic_pressure_operator(mrBoxDivisions, mrCellSize, mrActiveCells, mrLumpedMassVectorInv);
             periodic_pressure_operator.Apply(x, y);
             //periodic_pressure_operator.Output("pressure_matrix_without_bcs_" + std::to_string(mrBoxDivisions[0]) + "_" + std::to_string(mrBoxDivisions[1]), "../cpp_output/");
 
-            // std::unique_ptr<PressureOperator<dim>> p_pressure_operator;
+            // std::unique_ptr<PressureOperator> p_pressure_operator;
             // if (artificial_compressibility) {
-            //     auto p_aux = std::make_unique<PressureOperator<dim>>(rho, sound_velocity, box_divisions, cell_size, active_cells, periodic_lumped_mass_vector_inv);
+            //     auto p_aux = std::make_unique<PressureOperator>(rho, sound_velocity, box_divisions, cell_size, active_cells, periodic_lumped_mass_vector_inv);
             //     std::swap(p_pressure_operator, p_aux);
             // } else {
-            //     auto p_aux = std::make_unique<PressureOperator<dim>>(box_divisions, cell_size, active_cells, periodic_lumped_mass_vector_inv);
+            //     auto p_aux = std::make_unique<PressureOperator>(box_divisions, cell_size, active_cells, periodic_lumped_mass_vector_inv);
             //     std::swap(p_pressure_operator, p_aux);
             // }
             // p_pressure_operator->Apply(x, y);
@@ -276,16 +276,16 @@ private:
     //     std::vector<double> y(num_cells);
     //     x[free_cell_id] = 1.0;
 
-    //     PressureOperator<dim> periodic_pressure_operator(box_divisions, cell_size, periodic_lumped_mass_vector_inv);
+    //     PressureOperator periodic_pressure_operator(box_divisions, cell_size, periodic_lumped_mass_vector_inv);
     //     periodic_pressure_operator.Apply(x, y);
     //     // periodic_pressure_operator.f("pressure_matrix_without_bcs" + std::to_string(box_divisions[0]) + "_" + std::to_string(box_divisions[1]), results_path);
 
-    //     // std::unique_ptr<PressureOperator<dim>> p_pressure_operator;
+    //     // std::unique_ptr<PressureOperator> p_pressure_operator;
     //     // if (artificial_compressibility) {
-    //     //     auto p_aux = std::make_unique<PressureOperator<dim>>(rho, sound_velocity, box_divisions, cell_size, active_cells, periodic_lumped_mass_vector_inv);
+    //     //     auto p_aux = std::make_unique<PressureOperator>(rho, sound_velocity, box_divisions, cell_size, active_cells, periodic_lumped_mass_vector_inv);
     //     //     std::swap(p_pressure_operator, p_aux);
     //     // } else {
-    //     //     auto p_aux = std::make_unique<PressureOperator<dim>>(box_divisions, cell_size, active_cells, periodic_lumped_mass_vector_inv);
+    //     //     auto p_aux = std::make_unique<PressureOperator>(box_divisions, cell_size, active_cells, periodic_lumped_mass_vector_inv);
     //     //     std::swap(p_pressure_operator, p_aux);
     //     // }
     //     // p_pressure_operator->Apply(x, y);

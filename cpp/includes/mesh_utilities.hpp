@@ -1,10 +1,13 @@
+#pragma once
+
 #include <array>
 #include <utility>
 #include <vector>
 
-#include "include/experimental/mdspan"
+// Intel sycl
+#include <CL/sycl.hpp> 
 
-#pragma once
+#include "include/experimental/mdspan"
 
 template<int TDim>
 class MeshUtilities
@@ -21,9 +24,19 @@ public:
 
     using FixityMatrixViewType = std::experimental::mdspan<bool, ExtentsType>;
 
-    static std::pair<unsigned int, unsigned int> CalculateMeshData(const std::array<int, TDim>& rBoxDivisions);
+    SYCL_EXTERNAL static std::pair<unsigned int, unsigned int> CalculateMeshData(const std::array<int, TDim>& rBoxDivisions) {
+        if constexpr (TDim == 2) {
+            const unsigned int num_cells = rBoxDivisions[0] * rBoxDivisions[1];
+            const unsigned int num_nodes = (rBoxDivisions[0] + 1) * (rBoxDivisions[1] + 1);
+            return std::make_pair(num_nodes, num_cells);
+        } else {
+            const unsigned int num_cells = rBoxDivisions[0] * rBoxDivisions[1] * rBoxDivisions[2];
+            const unsigned int num_nodes = (rBoxDivisions[0] + 1) * (rBoxDivisions[1] + 1) * (rBoxDivisions[2] + 1);
+            return std::make_pair(num_nodes, num_cells);
+        }
+    }
 
-    static std::array<double, TDim> CalculateCellSize(
+    SYCL_EXTERNAL static std::array<double, TDim> CalculateCellSize(
         const std::array<double, TDim>& rBoxSize,
         const std::array<int, TDim>& rBoxDivisions);
 

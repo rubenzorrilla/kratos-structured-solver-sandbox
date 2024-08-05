@@ -56,6 +56,10 @@ file (GLOB_RECURSE KRATOS_STRUCTURED_SOLVER_SANDBOX_SOURCES
 add_library(KratosStructuredSolverSandboxLibrary SHARED ${KRATOS_STRUCTURED_SOLVER_SANDBOX_SOURCES}) # This creates the library (we need to specify all the sources)
 add_executable(KratosStructuredSolverSandboxExecutable "${CMAKE_CURRENT_SOURCE_DIR}/sources/run.cpp") # This creates the executable
 
+# CUDA is special and needs extra love
+set_property(TARGET KratosStructuredSolverSandboxLibrary PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+set_property(TARGET KratosStructuredSolverSandboxExecutable PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+
 target_link_libraries(KratosStructuredSolverSandboxExecutable PUBLIC KratosStructuredSolverSandboxLibrary PkgConfig::FFTW) # This links the static/shared library above with the previous executable
 
 install(TARGETS KratosStructuredSolverSandboxLibrary DESTINATION libs) # This installs the target (library) in the libs folder

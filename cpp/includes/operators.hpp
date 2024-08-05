@@ -2,9 +2,12 @@
 // #include <Eigen/Dense>
 #include "include/experimental/mdspan"
 
+// Intel sycl
+#include <CL/sycl.hpp> 
+
 #pragma once
 
-template<int TDim>
+template<int TDim, class src_accessor_t = std::vector<double>, class dst_accessor_t = std::vector<double>>
 class Operators
 {
 public:
@@ -17,7 +20,7 @@ public:
         const std::array<int, TDim>& rBoxDivisions,
         const std::array<double, TDim>& rCellSize,
         const std::vector<bool>& rActiveCells,
-        const std::vector<double>& rX,
+        const src_accessor_t & rX,
         MatrixViewType& rOutput);
 
     static void ApplyDivergenceOperator(
@@ -25,6 +28,6 @@ public:
         const std::array<double, TDim>& rCellSize,
         const std::vector<bool>& rActiveCells,
         const MatrixViewType& rX,
-        std::vector<double>& rOutput);
+        dst_accessor_t & rOutput);
 
 };
