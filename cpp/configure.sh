@@ -18,7 +18,7 @@ export BUILD_TYPE="Debug"
 
 # Set basic sycl flags to allow GCGPU
 # export SYCL_FLAGS="-fsycl -fsycl-targets=nvptx64-nvidia-cuda -fsycl-unnamed-lambda"
-export SYCL_FLAGS="-fsycl -fsycl-targets=spir64_x86_64 -fsycl-unnamed-lambda"
+export SYCL_FLAGS="-fsycl -fsycl-unnamed-lambda"
 
 # Clean
 clear
