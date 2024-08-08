@@ -24,8 +24,13 @@
 #include "pressure_preconditioner.hpp"
 #include "fft_pressure_preconditioner.hpp"
 #include "deflation_pressure_preconditioner.hpp"
-// #include "pressure_conjugate_gradient_solver.hpp"
-#include "pressure_conjugate_gradient_solver_gpu.hpp"
+
+#ifndef USE_PRESSURE_CG_GPU
+    #include "pressure_conjugate_gradient_solver.hpp"
+#else
+    #include "pressure_conjugate_gradient_solver_gpu.hpp"
+#endif
+
 #include "incompressible_navier_stokes_q1_p0_structured_element.hpp"
 
 #include "utilities/perf.h"
@@ -466,7 +471,7 @@ int main()
     }
     std::cout << "Pressure linear operator created." << std::endl;
 
-    PressureConjugateGradientSolverGPU<dim> cg(pres_abs_tol, pres_rel_tol, pres_max_iter, pressure_operator, p_pressure_preconditioner);
+    PressureConjugateGradientSolver<dim> cg(pres_abs_tol, pres_rel_tol, pres_max_iter, pressure_operator, p_pressure_preconditioner);
     std::cout << "Pressure conjugate gradient solver created." << std::endl;
 
     // Time loop

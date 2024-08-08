@@ -162,65 +162,30 @@ public:
 
         // Apply the divergence operator to the auxiliary vector and store the result in the output array
         Operators<TDim>::ApplyDivergenceOperator(mrBoxDivisions, mrCellSize, mrActiveCells, aux, rOutput);
-
-        // // Append the artificial compressibility contribution
-        // if (mArtificialCompressibility) {
-        //     const double mass_factor = std::reduce(mrCellSize.begin(), mrCellSize.end(), 1.0, std::multiplies<>());
-        //     const double bulk_factor = mass_factor / (mRho * std::pow(mSoundVelocity, 2));
-        //     for (unsigned int i = 0; i < rInput.size(); ++i) {
-        //         //FIXME: I'm not sure about this sign. This is to be checked!
-        //         rOutput[i] += bulk_factor * rInput[i]; //TODO: I think we can use std::transform for this
-        //     }
-        // }
-
-        // // if (mpActiveCells != nullptr) {
-        //     const double tau = 1.0e-1;
-        //     for (unsigned int i = 0; i < mrBoxDivisions[1]; ++i) {
-        //         for (unsigned int j = 0; j < mrBoxDivisions[0]; ++j) {
-        //             double temp = 0.0;
-        //             unsigned int cell_id = CellUtilities::GetCellGlobalId(i, j, mrBoxDivisions);
-        //             // if (GetActiveCells()[cell_id]) {
-        //                 // Bottom cell
-        //                 if (i > 0) {
-        //                     unsigned int neigh_cell_id = CellUtilities::GetCellGlobalId(i - 1, j, mrBoxDivisions);
-        //                     // if (GetActiveCells()[cell_id]) {
-        //                         temp += mrCellSize[0] * (rInput[cell_id] - rInput[neigh_cell_id]);
-        //                     // }
-        //                 }
-        //                 // Top cell
-        //                 if (i < mrBoxDivisions[1] - 1) {
-        //                     unsigned int neigh_cell_id = CellUtilities::GetCellGlobalId(i + 1, j, mrBoxDivisions);
-        //                     // if (GetActiveCells()[cell_id]) {
-        //                         temp += mrCellSize[0] * (rInput[cell_id] - rInput[neigh_cell_id]);
-        //                     // }
-        //                 }
-        //                 // Left cell
-        //                 if (j > 0) {
-        //                     unsigned int neigh_cell_id = CellUtilities::GetCellGlobalId(i, j - 1, mrBoxDivisions);
-        //                     // if (GetActiveCells()[cell_id]) {
-        //                         temp += mrCellSize[1] * (rInput[cell_id] - rInput[neigh_cell_id]);
-        //                     // }
-        //                 }
-        //                 // Right cell
-        //                 if (j < mrBoxDivisions[0] - 1) {
-        //                     unsigned int neigh_cell_id = CellUtilities::GetCellGlobalId(i, j + 1, mrBoxDivisions);
-        //                     // if (GetActiveCells()[cell_id]) {
-        //                         temp += mrCellSize[1] * (rInput[cell_id] - rInput[neigh_cell_id]);
-        //                     // }
-        //                 }
-        //                 rOutput[cell_id] += tau * temp;
-        //             // }
-        //         }
-        //     }
-        // // }
-
-        std::cout << "I've executed this" << std::endl;
     }
 
     template<class src_accessor_t, class dst_accessor_t>
     SYCL_EXTERNAL void ApplyGPU(
         const src_accessor_t& rInput,
               dst_accessor_t& rOutput)
+    {
+        MatrixViewType aux(mAuxData, mNnodes, TDim);
+
+        // Apply gradient operator to input vector
+        LocalApplyGradientOperator(mrBoxDivisions, mrCellSize, mrActiveCells, rInput, aux);
+
+        // Apply the lumped mass inverse to the auxiliary vector
+        for (unsigned int i = 0; i < mrLumpedMassVectorInv.extent(0); ++i) {
+            for (unsigned int j = 0; j < mrLumpedMassVectorInv.extent(1); ++j) {
+                aux(i, j) *= mrLumpedMassVectorInv(i, j);
+            }
+        }
+
+        // Apply the divergence operator to the auxiliary vector and store the result in the output array
+        LocalApplyDivergenceOperator(mrBoxDivisions, mrCellSize, mrActiveCells, aux, rOutput);
+    }
+
+    void ApplyAccessor(auto& rInput, auto& rOutput)
     {
         MatrixViewType aux(mAuxData, mNnodes, TDim);
 

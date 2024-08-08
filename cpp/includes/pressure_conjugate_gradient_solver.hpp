@@ -109,6 +109,8 @@ public:
 
             const double alpha_k = aux_1 / aux_2;
 
+            std::cout << "BFR - Iteration " << alpha_k << " " << mIters << " " << r_k_1[0] << " " << r_k[0] <<  std::endl;
+
             counter_beg = std::chrono::high_resolution_clock::now();
             for (unsigned int i = 0; i < mProblemSize; ++i) {
                 rX[i] = rX[i] + alpha_k * d_k[i];
@@ -119,8 +121,14 @@ public:
             // Check convergence
             double res_norm;
             double res_inc_norm;
+
+            std::cout << "GFR - Iteration " << mIters << " " << r_k_1[0] << " = " << r_k[0] << " - " << alpha_k << " * " << aux[0] <<  std::endl;
+
             std::tie(res_norm, res_inc_norm) = ComputeResidualNorms(r_k, r_k_1);
-            // std::cout << "Iteration " << mIters << " Res. norm " << res_norm << " Res. inc. norm " << res_inc_norm << std::endl;
+            
+            std::cout << "Iteration " << mIters << " Res. norm " << res_norm << " Res. inc. norm " << res_inc_norm << std::endl;
+            abort();
+
             if (res_norm < mAbsTol || res_inc_norm / res_norm < mRelTol) {
                 mIsConverged = true;
                 break;

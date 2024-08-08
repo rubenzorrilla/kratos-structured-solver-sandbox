@@ -17,15 +17,15 @@
 #include "operators.hpp"
 
 template<int TDim>
-class PressureConjugateGradientSolverGPU
+class PressureConjugateGradientSolver
 {
 public:
 
     using VectorType = std::vector<double>;
 
-    PressureConjugateGradientSolverGPU() = default;
+    PressureConjugateGradientSolver() = default;
 
-    PressureConjugateGradientSolverGPU(
+    PressureConjugateGradientSolver(
         const double AbsTol,
         const double RelTol,
         const unsigned int MaxIter,
@@ -92,34 +92,37 @@ public:
             // cl::sycl::queue queue(cl::sycl::accelerator_selector_v);
 
             mrPressureOperator.Apply(rX, aux); //TODO: We can do a mult and add to make this more efficient
-            for (unsigned int i = 0; i < gpu_frame_size; ++i) {
-                r_k[i] = rB[i] - aux[i];
-            }
+            // for (unsigned int i = 0; i < gpu_frame_size; ++i) {
+            //     r_k[i] = rB[i] - aux[i];
+            // }
 
             auto resultBuf      = sycl::buffer<double>(&d_sum, 1);
             
-            auto aux_gpu_buff   = sycl::buffer{aux.data(),      cl::sycl::range<1>{gpu_frame_size}};
-            auto r_k_gpu_buff   = sycl::buffer{r_k.data(),      cl::sycl::range<1>{gpu_frame_size}};
+            auto rB_gpu_buff    = sycl::buffer{rB.data(),       cl::sycl::range<1>{gpu_frame_size}};
+            auto rX_gpu_buff    = sycl::buffer{rX.data(),       cl::sycl::range<1>{gpu_frame_size}};
 
-            auto rB_gpu_buff    = sycl::buffer{rB.data(),       cl::sycl::range<1>{rB.size()}};
-            auto rX_gpu_buff    = sycl::buffer{rX.data(),       cl::sycl::range<1>{rX.size()}};
+            auto aux_gpu_buff   = sycl::buffer{aux.data(),      cl::sycl::range<1>{gpu_frame_size}};
+
+            auto r_k_gpu_buff   = sycl::buffer{r_k.data(),      cl::sycl::range<1>{gpu_frame_size}};
+            auto r_k_1_gpu_buff = sycl::buffer{r_k_1.data(),    cl::sycl::range<1>{gpu_frame_size}};
 
             auto d_k_gpu_buff   = sycl::buffer{d_k.data(),      cl::sycl::range<1>{gpu_frame_size}};
             auto d_k_1_gpu_buff = sycl::buffer{d_k_1.data(),    cl::sycl::range<1>{gpu_frame_size}};
-            auto r_k_1_gpu_buff = sycl::buffer{r_k_1.data(),    cl::sycl::range<1>{gpu_frame_size}};
+
             auto z_k_gpu_buff   = sycl::buffer{z_k.data(),      cl::sycl::range<1>{gpu_frame_size}};
             auto z_k_1_gpu_buff = sycl::buffer{z_k_1.data(),    cl::sycl::range<1>{gpu_frame_size}};
             
             queue.submit([&, lLocalProbemSize=this->mLocalProblemSize](cl::sycl::handler & cgh) {
-                cl::sycl::accessor aux_gpu_acc{aux_gpu_buff, cgh, sycl::read_write};
                 cl::sycl::accessor r_k_gpu_acc{r_k_gpu_buff, cgh, sycl::read_write};
+                // cl::sycl::accessor rX_gpu_acc{rB_gpu_buff, cgh, sycl::read_write};
+
+                cl::sycl::accessor aux_gpu_acc{aux_gpu_buff, cgh, sycl::read_only};
                 cl::sycl::accessor rB_gpu_acc{rB_gpu_buff, cgh, sycl::read_only};
-                cl::sycl::accessor rX_gpu_acc{rB_gpu_buff, cgh, sycl::read_write};
                 
-                cgh.parallel_for<class GPU_PressureOperator_Apply>(cl::sycl::nd_range(
+                cgh.parallel_for(cl::sycl::nd_range(
                         sycl::range<1>{static_cast<int>(gpu_frame_size)},     // Global size
                         sycl::range<1>{static_cast<int>(lLocalProbemSize)}    // Local size
-                    ), [=, this](cl::sycl::nd_item<1> it) {
+                    ), [=](cl::sycl::nd_item<1> it) {
 
                         std::size_t idx  = it.get_global_id(0);
                         std::size_t size = it.get_global_range(0);
@@ -127,17 +130,19 @@ public:
                         // mrPressureOperator.ApplyGPU(rX_gpu_acc, aux_gpu_acc);
 
                         for (std::size_t i = idx; i < size; i += size) {
-                            r_k_gpu_acc[idx] = rB_gpu_acc[idx] - aux_gpu_acc[idx];
+                            r_k_gpu_acc[i] = rB_gpu_acc[i] - aux_gpu_acc[i];
                         }
                 });
 
-                queue.wait();
+                // queue.wait();
             });
 
-            double res_norm = 1337.0;
+            double res_norm = 0.0;
+
+            std::cout << "Here 0" << std::endl;
 
             // Check initial residual
-            queue.submit([&aux_gpu_buff, &r_k_gpu_buff, &queue, &resultBuf, &gpu_frame_size, lLocalProbemSize=this->mLocalProblemSize](cl::sycl::handler & cgh) {
+            queue.submit([&, lLocalProbemSize=this->mLocalProblemSize](cl::sycl::handler & cgh) {
                 cl::sycl::accessor aux_gpu_acc{aux_gpu_buff, cgh, sycl::read_only};
                 cl::sycl::accessor r_k_gpu_acc{r_k_gpu_buff, cgh, sycl::read_only};
 
@@ -151,12 +156,14 @@ public:
                     std::size_t size = it.get_global_range(0);
 
                     for (std::size_t i = idx; i < size; i += size) {
-                        sum += r_k_gpu_acc[idx] * r_k_gpu_acc[idx];
+                        sum += r_k_gpu_acc[i] * r_k_gpu_acc[i];
                     }
                 });
 
-                queue.wait();
+                // queue.wait();
             });
+
+            std::cout << "Here 1" << std::endl;
             
             sycl::host_accessor result {resultBuf, sycl::read_only};
             res_norm = std::sqrt(result[0]);
@@ -172,9 +179,35 @@ public:
                 mIters = 1;
             }
 
-            ApplyPreconditioner(r_k, z_k);
-            
-            d_k = z_k;
+            {
+                sycl::host_accessor ha_r_k(r_k_gpu_buff);
+                sycl::host_accessor ha_z_k(z_k_gpu_buff);
+
+                ApplyPreconditioner(ha_r_k, ha_z_k);
+            }
+            // d_k = z_k;
+
+            queue.submit([&, lLocalProbemSize=this->mLocalProblemSize](cl::sycl::handler & cgh) {
+                cl::sycl::accessor d_k_gpu_acc{d_k_gpu_buff, cgh, sycl::read_write};
+                cl::sycl::accessor z_k_gpu_acc{z_k_gpu_buff, cgh, sycl::read_write};
+                
+                cgh.parallel_for(cl::sycl::nd_range(
+                        sycl::range<1>{static_cast<int>(gpu_frame_size)},     // Global size
+                        sycl::range<1>{static_cast<int>(lLocalProbemSize)}    // Local size
+                    ), [=](cl::sycl::nd_item<1> it) {
+
+                        std::size_t idx  = it.get_global_id(0);
+                        std::size_t size = it.get_global_range(0);
+
+                        for (std::size_t i = idx; i < size; i += size) {
+                            d_k_gpu_acc[i] = z_k_gpu_acc[i];
+                        }
+                });
+
+                queue.wait();
+            });
+
+            mMaxIter = 2000;
 
             while (!mIsConverged && mIters < mMaxIter) {
                 // Compute current iteration residual and solution
@@ -182,56 +215,72 @@ public:
                 double aux_2 = 0.0;
 
                 counter_beg = std::chrono::high_resolution_clock::now();
-                mrPressureOperator.Apply(d_k, aux);
+                {
+                    sycl::host_accessor ha_d_k(d_k_gpu_buff);
+                    sycl::host_accessor ha_aux(aux_gpu_buff);
+
+                    mrPressureOperator.ApplyAccessor(ha_d_k, ha_aux);
+                }
                 times[0] += std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - counter_beg);
 
                 counter_beg = std::chrono::high_resolution_clock::now();
-                for (unsigned int i = 0; i < mProblemSize; ++i) {
-                    // aux_1 += r_k[i] * r_k[i]; // Identity preconditioner
-                    aux_1 += r_k[i] * z_k[i];
-                    aux_2 += d_k[i] * aux[i];
-                    if(aux[i] > 0.0) {
-                        std::cout << "#: " <<  r_k[i] << " " << z_k[i] << " " << d_k[i] << " " << aux[i] << " " << aux_1 << std::endl;
-                        abort();
+                {
+                    sycl::host_accessor ha_r_k(r_k_gpu_buff);
+                    sycl::host_accessor ha_z_k(z_k_gpu_buff);
+                    sycl::host_accessor ha_d_k(d_k_gpu_buff);
+                    sycl::host_accessor ha_aux(aux_gpu_buff);
+
+                    for (unsigned int i = 0; i < mProblemSize; ++i) {
+                        aux_1 += r_k[i] * z_k[i];
+                        aux_2 += d_k[i] * aux[i];
                     }
                 }
                 times[1] += std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - counter_beg);
 
-                std::cout << "AUXES: " << aux_1 << " " << aux_2 << std::endl;
-
-                abort();
-
                 const double alpha_k = aux_1 / aux_2; 
 
-                std::cout << "BFR - Iteration " << alpha_k << " " << mIters << " " << r_k_1[0] << " " << r_k[0] <<  std::endl;
-
                 counter_beg = std::chrono::high_resolution_clock::now();
-                queue.submit([&](cl::sycl::handler & cgh) {
-                    cl::sycl::accessor rX_gpu_acc{rX_gpu_buff, cgh, sycl::read_write};
+                queue.submit([&, lLocalProbemSize=this->mLocalProblemSize](cl::sycl::handler & cgh) {
+                    cl::sycl::accessor rX_gpu_acc{rB_gpu_buff, cgh, sycl::read_write};
                     cl::sycl::accessor r_k_1_gpu_acc{r_k_1_gpu_buff, cgh, sycl::read_write};
- 
-                    cl::sycl::accessor aux_gpu_acc{aux_gpu_buff, cgh, sycl::read_only};
-                    cl::sycl::accessor d_k_gpu_acc{d_k_gpu_buff, cgh, sycl::read_only};
-                    cl::sycl::accessor r_k_gpu_acc{r_k_gpu_buff, cgh, sycl::read_only};
 
-                    cgh.parallel_for(cl::sycl::range<1>(mProblemSize), [=](cl::sycl::item<1> item) {
-                        auto idx = item.get_id(0);
-                        rX_gpu_acc[idx] = rX_gpu_acc[idx] + alpha_k * d_k_gpu_acc[idx];
-                        r_k_1_gpu_acc[idx] = r_k_gpu_acc[idx] - alpha_k * aux_gpu_acc[idx];
+                    cl::sycl::accessor d_k_gpu_acc{d_k_gpu_buff, cgh, sycl::read_only};
+                    cl::sycl::accessor aux_gpu_acc{aux_gpu_buff, cgh, sycl::read_only};
+                    cl::sycl::accessor r_k_gpu_acc{r_k_gpu_buff, cgh, sycl::read_only};
+                    
+                    cgh.parallel_for(cl::sycl::nd_range(
+                            sycl::range<1>{static_cast<int>(gpu_frame_size)},     // Global size
+                            sycl::range<1>{static_cast<int>(lLocalProbemSize)}    // Local size
+                        ), [=](cl::sycl::nd_item<1> it) {
+
+                            std::size_t idx  = it.get_global_id(0);
+                            std::size_t size = it.get_global_range(0);
+
+                            for (std::size_t i = idx; i < size; i += size) {
+                                rX_gpu_acc[i] = rX_gpu_acc[i] + alpha_k * d_k_gpu_acc[i];
+                                r_k_1_gpu_acc[i] = r_k_gpu_acc[i] - alpha_k * aux_gpu_acc[i];
+                            }
                     });
 
                     queue.wait();
                 });
-                times[2] += std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - counter_beg);
 
-                std::cout << "GFR - Iteration " << mIters << " " << r_k_1[0] << " " << r_k[0] <<  std::endl;
+                times[2] += std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - counter_beg);
 
                 // Check convergence
                 double res_norm;
                 double res_inc_norm;
 
-                std::tie(res_norm, res_inc_norm) = ComputeResidualNorms(r_k, r_k_1);
-                std::cout << "AFT - Iteration " << mIters << " Res. norm " << res_norm << " Res. inc. norm " << res_inc_norm << " " << r_k_1[0] << " " << r_k[0] <<  std::endl;
+                {
+                    sycl::host_accessor ha_r_k(r_k_gpu_buff);
+                    sycl::host_accessor ha_r_k_1(r_k_1_gpu_buff);
+
+                    std::tie(res_norm, res_inc_norm) = ComputeResidualNorms(ha_r_k, ha_r_k_1);
+                }
+
+                std::cout << "Iteration " << mIters << " Res. norm " << res_norm << " Res. inc. norm " << res_inc_norm << std::endl;
+
+                mIsConverged = (res_norm < mAbsTol || res_inc_norm / res_norm < mRelTol);
 
                 if (!mIsConverged && mIters < mMaxIter) 
                 {
@@ -240,29 +289,48 @@ public:
                     double aux_4 = 0.0;
 
                     counter_beg = std::chrono::high_resolution_clock::now();
-                    ApplyPreconditioner(r_k_1, z_k_1);
+                    {
+                        sycl::host_accessor ha_r_k_1(r_k_1_gpu_buff);
+                        sycl::host_accessor ha_z_k_1(z_k_1_gpu_buff);
+
+                        ApplyPreconditioner(ha_r_k_1, ha_z_k_1);
+                    }
                     times[3] += std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - counter_beg);
 
                     counter_beg = std::chrono::high_resolution_clock::now();
-                    for (unsigned int i = 0; i < mProblemSize; ++i) {
-                        aux_3 += r_k_1[i] * z_k_1[i];
-                        aux_4 += r_k[i] * z_k[i];
+                    {
+                        sycl::host_accessor ha_r_k(r_k_gpu_buff);
+                        sycl::host_accessor ha_r_k_1(r_k_1_gpu_buff);
+
+                        sycl::host_accessor ha_z_k(z_k_gpu_buff);
+                        sycl::host_accessor ha_z_k_1(z_k_1_gpu_buff);
+
+                        for (unsigned int i = 0; i < mProblemSize; i++) {
+                            aux_3 += ha_r_k_1[i] * ha_z_k_1[i];
+                            aux_4 += ha_r_k[i] * ha_z_k[i];
+                        }
                     }
                     times[4] += std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - counter_beg);
                     
                     const double beta_k = aux_3 / aux_4;
 
                     counter_beg = std::chrono::high_resolution_clock::now();
-                    queue.submit([&](cl::sycl::handler & cgh) {
+                    queue.submit([&, lLocalProbemSize=this->mLocalProblemSize](cl::sycl::handler & cgh) {
                         cl::sycl::accessor d_k_1_gpu_acc{d_k_1_gpu_buff, cgh, sycl::read_write};
 
                         cl::sycl::accessor d_k_gpu_acc{d_k_gpu_buff, cgh, sycl::read_only};
                         cl::sycl::accessor z_k_1_gpu_acc{z_k_1_gpu_buff, cgh, sycl::read_only};
 
-                        cgh.parallel_for(cl::sycl::range<1>(mProblemSize), [=](cl::sycl::item<1> item) {
-                            auto idx = item.get_id(0);
+                        cgh.parallel_for(cl::sycl::nd_range(
+                            sycl::range<1>{static_cast<int>(gpu_frame_size)},     // Global size
+                            sycl::range<1>{static_cast<int>(lLocalProbemSize)}    // Local size
+                        ), [=](cl::sycl::nd_item<1> it) {
+                            std::size_t idx  = it.get_global_id(0);
+                            std::size_t size = it.get_global_range(0);
 
-                            d_k_1_gpu_acc[idx] = z_k_1_gpu_acc[idx] + beta_k * d_k_gpu_acc[idx];
+                            for (std::size_t i = idx; i < size; i += size) {
+                                d_k_1_gpu_acc[i] = z_k_1_gpu_acc[i] + beta_k * d_k_gpu_acc[i];
+                            }
                         });
 
                         queue.wait();
@@ -272,7 +340,7 @@ public:
                     // Update variables for next step
                     mIters++;
 
-                    queue.submit([&](cl::sycl::handler & cgh) {
+                    queue.submit([&, lLocalProbemSize=this->mLocalProblemSize](cl::sycl::handler & cgh) {
                         cl::sycl::accessor d_k_gpu_acc{d_k_gpu_buff, cgh, sycl::read_write};
                         cl::sycl::accessor r_k_gpu_acc{r_k_gpu_buff, cgh, sycl::read_write};
                         cl::sycl::accessor z_k_gpu_acc{z_k_gpu_buff, cgh, sycl::read_write};
@@ -281,12 +349,18 @@ public:
                         cl::sycl::accessor r_k_1_gpu_acc{r_k_1_gpu_buff, cgh, sycl::read_only};
                         cl::sycl::accessor z_k_1_gpu_acc{z_k_1_gpu_buff, cgh, sycl::read_only};
 
-                        cgh.parallel_for(cl::sycl::range<1>(mProblemSize), [=](cl::sycl::item<1> item) {
-                            auto idx = item.get_id(0);
+                        cgh.parallel_for(cl::sycl::nd_range(
+                            sycl::range<1>{static_cast<int>(gpu_frame_size)},     // Global size
+                            sycl::range<1>{static_cast<int>(lLocalProbemSize)}    // Local size
+                        ), [=](cl::sycl::nd_item<1> it) {
+                            std::size_t idx  = it.get_global_id(0);
+                            std::size_t size = it.get_global_range(0);
 
-                            d_k_gpu_acc[idx] = d_k_1_gpu_acc[idx];
-                            r_k_gpu_acc[idx] = r_k_1_gpu_acc[idx];
-                            z_k_gpu_acc[idx] = z_k_1_gpu_acc[idx];
+                            for (std::size_t i = idx; i < size; i += size) {
+                                d_k_gpu_acc[i] = d_k_1_gpu_acc[i];
+                                r_k_gpu_acc[i] = r_k_1_gpu_acc[i];
+                                z_k_gpu_acc[i] = z_k_1_gpu_acc[i];
+                            }
                         });
 
                         queue.wait();
@@ -357,7 +431,10 @@ private:
         const src_accessor_t& rInput,
         dst_accessor_t& rOutput)
     {
-        // mpPressurePreconditioner->Apply(rInput, rOutput);
+        for(std::size_t i = 0; i < rInput.size(); i++) {
+            rOutput[i] = rInput[i];
+        }
+        // mpPressurePreconditioner->ApplyAccessor(rInput, rOutput);
     }
 
 };
